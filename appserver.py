@@ -3,6 +3,7 @@ import socket
 import selectors
 import traceback
 import subprocess
+import os
 
 import libserver
 
@@ -16,7 +17,8 @@ def acceptWrapper(sock):
     sel.register(conn,selectors.EVENT_READ,data=message)
 
 if len(sys.argv) < 2:
-    r = subprocess.run(['./get_ip.sh'],stdout=subprocess.PIPE)
+    sfile = os.path.dirname(os.path.abspath(__file__)) + '/get_ip.sh'
+    r = subprocess.run([sfile],stdout=subprocess.PIPE)
     host = r.stdout.decode('ascii').rstrip()
     port = 6666
 elif len(sys.argv) == 2:
