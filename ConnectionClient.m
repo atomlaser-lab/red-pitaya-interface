@@ -75,7 +75,8 @@ classdef ConnectionClient < handle
                 % If no connections exist, create that connection
                 %
                 self.client = tcpip(self.host,self.port,'byteOrder','littleEndian');
-                self.client.InputBufferSize = 2^20;
+                self.client.InputBufferSize = 2^24;
+                self.client.OutputBufferSize = 2^24;
                 fopen(self.client);
             elseif strcmpi(r.Status,'closed')
                 %
@@ -83,7 +84,8 @@ classdef ConnectionClient < handle
                 % size correctly and then open it
                 %
                 self.client = r;
-                self.client.InputBufferSize = 2^20;
+                self.client.InputBufferSize = 2^24;
+                self.client.OutputBufferSize = 2^24;
                 fopen(self.client);
             else
                 %

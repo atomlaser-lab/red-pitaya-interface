@@ -51,6 +51,18 @@ def write(data,header):
 
 
     elif header["mode"] == "command":
+        #
+        # If there is data to write (len(data) > 1), then write that to a file
+        #
+        if len(data) > 1:
+            fid = open("data-to-write.bin","wb")
+            newData = []
+            for i in range(1,len(data)):
+                fid.write(struct.pack("<I",data[i]))
+            fid.close()
+        #
+        # Otherwise, parse the command
+        #
         cmd = header["cmd"]
         if ("print" in header) and (header["print"]):
             print("Command: ",cmd)
