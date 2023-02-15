@@ -240,7 +240,8 @@ classdef ConnectionClient < handle
             %PROCESSHEADER Reads the header data from the message
             if ~isempty(self.headerLength) && self.client.BytesAvailable >= self.headerLength && self.client.BytesAvailable > 0
                 tmp = self.client.read(self.headerLength,'uint8');
-                self.header = jsondecode(char(tmp)');
+                tmp = char(tmp(:)');
+                self.header = jsondecode(tmp);
                 if ~isfield(self.header,'length')
                     %
                     % If there is no "length" parameter, there is no data
