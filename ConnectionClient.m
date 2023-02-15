@@ -66,34 +66,10 @@ classdef ConnectionClient < handle
             %   OPEN(SELF) opens the connection associated with current
             %   CONNECTIONCLIENT object SELF
             
-            %
-            % Look for existing connections
-            %
-            r = instrfindall('RemoteHost',self.host,'RemotePort',self.port);
-            if isempty(r)
-                %
-                % If no connections exist, create that connection
-                %
-                self.client = tcpip(self.host,self.port,'byteOrder','littleEndian');
-                self.client.InputBufferSize = 2^24;
-                self.client.OutputBufferSize = 2^24;
-                fopen(self.client);
-            elseif strcmpi(r.Status,'closed')
-                %
-                % If a connection exists but it is closed, set the buffer
-                % size correctly and then open it
-                %
-                self.client = r;
-                self.client.InputBufferSize = 2^24;
-                self.client.OutputBufferSize = 2^24;
-                fopen(self.client);
-            else
-                %
-                % Otherwise set the client parameter to that connection
-                %
-                self.client = r;
-            end
-                
+            self.client = tcpclient(self.host,self.port);
+            self.client.InputBufferSize = 2^24;
+            self.client.OutputBufferSize = 2^24;
+            self.client.ByteOrder = 'little-endian';                
         end
         
         function close(self)
@@ -101,10 +77,6 @@ classdef ConnectionClient < handle
             %
             %   CLOSE(SELF) closes the client connection for current
             %   CONNECTIONCLIENT object SELF
-            if ~isempty(self.client) && isvalid(self.client) && strcmpi(self.client,'open')
-                fclose(self.client);
-            end
-            delete(self.client);
             self.client = [];
         end
         
@@ -198,7 +170,7 @@ classdef ConnectionClient < handle
                 % length), (header), (data).
                 data = data(:)';
                 msg_write = [typecast(len,'uint8'),uint8(msghdr),typecast(uint32(data),'uint8')];
-                fwrite(self.client,msg_write,'uint8');
+                self.client.write(msg_write);
                 %
                 % Wait for new data.  The wait is done this way because the
                 % normal timeout doesn't really work that well.  
@@ -260,14 +232,14 @@ classdef ConnectionClient < handle
             %proto-header (which indicates the length of the proper header)
             %when enough bytes are available.
             if self.client.BytesAvailable >= 2 && self.client.BytesAvailable > 0
-                self.headerLength = fread(self.client,1,'uint16');
+                self.headerLength = self.client.read(1,'uint16');
             end
         end
         
         function processHeader(self)
             %PROCESSHEADER Reads the header data from the message
             if ~isempty(self.headerLength) && self.client.BytesAvailable >= self.headerLength && self.client.BytesAvailable > 0
-                tmp = fread(self.client,self.headerLength,'uint8');
+                tmp = self.client.read(self.headerLength,'uint8');
                 self.header = jsondecode(char(tmp)');
                 if ~isfield(self.header,'length')
                     %
@@ -283,7 +255,7 @@ classdef ConnectionClient < handle
             %PROCESSMESSAGE Reads the data payload from the message
             if self.bytesRead < self.header.length && self.client.BytesAvailable > 0
                 bytesToRead = self.client.BytesAvailable;
-                tmp = uint8(fread(self.client,bytesToRead,'uint8'));
+                tmp = uint8(self.client.read(bytesToRead,'uint8'));
                 self.recvMessage = [self.recvMessage;tmp];
                 self.bytesRead = numel(self.recvMessage);
             end
