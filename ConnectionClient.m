@@ -67,9 +67,9 @@ classdef ConnectionClient < handle
             %   CONNECTIONCLIENT object SELF
             
             self.client = tcpclient(self.host,self.port);
-            self.client.InputBufferSize = 2^24;
-            self.client.OutputBufferSize = 2^24;
-            self.client.ByteOrder = 'little-endian';                
+%             self.client.InputBufferSize = 2^24;
+%             self.client.OutputBufferSize = 2^24;
+%             self.client.ByteOrder = 'little-endian';                
         end
         
         function close(self)
@@ -232,7 +232,7 @@ classdef ConnectionClient < handle
             %proto-header (which indicates the length of the proper header)
             %when enough bytes are available.
             if self.client.BytesAvailable >= 2 && self.client.BytesAvailable > 0
-                self.headerLength = self.client.read(1,'uint16');
+                self.headerLength = double(self.client.read(1,'uint16'));
             end
         end
         
