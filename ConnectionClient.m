@@ -257,7 +257,7 @@ classdef ConnectionClient < handle
             if self.bytesRead < self.header.length && self.client.BytesAvailable > 0
                 bytesToRead = self.client.BytesAvailable;
                 tmp = uint8(self.client.read(bytesToRead,'uint8'));
-                self.recvMessage = [self.recvMessage;tmp];
+                self.recvMessage = [self.recvMessage;tmp(:)];
                 self.bytesRead = numel(self.recvMessage);
             end
             
