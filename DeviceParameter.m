@@ -43,10 +43,10 @@ classdef DeviceParameter < handle
             
             if nargin < 3
                 self.type = 'uint32';
-            elseif strcmp(type,'int32') || strcmp(type,'uint32') || strcmp(type,'int16')
+            elseif strcmp(type,'int32') || strcmp(type,'uint32') || strcmp(type,'int16') || strcmp(type,'int8')
                 self.type = type;
             else
-                error('Type must be either ''uint32'', ''int32'', or ''int16''!');
+                error('Type must be either ''uint32'', ''int32'', or ''int16'' or ''int8''!');
             end
             
             if numel(self.regs) > 1 && ~strcmpi(self.type,'uint32')
@@ -196,6 +196,8 @@ classdef DeviceParameter < handle
                     self.intValue = typecast(int32(self.intValue),'uint32');
                 elseif strcmpi(self.type,'int16')
                     self.intValue = uint32(typecast(int16(self.intValue),'uint16'));
+                elseif strcmpi(self.type,'int8')
+                    self.intValue = uint32(typecast(int8(self.intValue),'uint8'));
                 end
                 %
                 % Set the appropriate register values
@@ -204,7 +206,7 @@ classdef DeviceParameter < handle
                     self.regs.set(self.intValue,self.bits);
                 else
                     tmp = uint64(self.intValue);
-                    for nn=1:numel(self.regs)
+                    for nn = 1:numel(self.regs)
                         self.regs(nn).set(tmp,self.bits(nn,:));
                         tmp = bitshift(tmp,-abs(diff(self.bits(nn,:)))-1);
                     end
@@ -232,6 +234,8 @@ classdef DeviceParameter < handle
                         v = typecast(self.intValue,'uint32');
                     elseif strcmpi(self.type,'int16')
                         v = typecast(uint16(self.intValue),'int16');
+                    elseif strcmpi(self.type,'int8')
+                        v = typecast(uint8(self.intValue),'int8');
                     end
                 else
                     %
