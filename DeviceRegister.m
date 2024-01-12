@@ -2,12 +2,13 @@ classdef DeviceRegister < handle
     %DEVICEREGISTER Defines a class representing registers inside the
     %device
     properties
-        addr    %The address of the register as a uint32 integer
-        value   %The value of the register as a uint32 integer
+        addr        %The address of the register as a uint32 integer
+        value       %The value of the register as a uint32 integer
+        read_only   %Boolean value indicating if register is read-only
     end
     
     properties(Access = protected)
-        conn    %A CONNECTIONCLIENT object to use for writing/reading data
+        conn        %A CONNECTIONCLIENT object to use for writing/reading data
     end
     
     properties(Constant)
@@ -16,12 +17,16 @@ classdef DeviceRegister < handle
     end
     
     methods
-        function self = DeviceRegister(addr,conn)
+        function self = DeviceRegister(addr,conn,read_only)
             %DEVICEREGISTER Constructs an object
             %
             %   SELF = DEVICEREGISTER(ADDR,CONN) creates an object with
             %   associated address and connection object.  The value of the
-            %   register is initialized to 0
+            %   register is initialized to 0. READ_ONLY property is set to false
+            %
+            %   SELF = DEVICEREGISTER(ADDR,CONN,READ_ONLY) creates an object with
+            %   associated address and connection object.  The value of the
+            %   register is initialized to 0.  READ_ONLY property is set.
             
             if nargin > 0
                 self.addr = addr;
@@ -29,6 +34,11 @@ classdef DeviceRegister < handle
                 if nargin > 1
                     self.conn = conn;
                 end
+            end
+            if nargin < 3
+                self.read_only = false;
+            else
+                self.read_only = read_only;
             end
         end
     
