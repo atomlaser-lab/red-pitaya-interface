@@ -161,45 +161,53 @@ classdef DeviceParameter < handle
             %   SET(SELF,VALUE) Sets the parameter to the value given by
             %   VALUE.  Converts to the integer representation and sets the
             %   appropriate bits in the registers
-            %
-            
-            %
-            % Check limits first, then convert to integer and check that
-            % the value will fit in the registers
-            %
-            if ~ischar(v) && ~isstring(v)
-                self.checkLimits(v);
-            end
-            tmp = self.toInteger(v,varargin{:});
-            if log2(double(tmp)) > self.numbits
-                error('Value will not fit in bit range with %d bits',self.numbits);
-            end
-            %
-            % Set the value and the integer value
-            %
-            self.value = v;
-            self.intValue = tmp;
-            %
-            % Convert that integer value to the appropriate data type and
-            % type cast it to a uint32 value
-            %
-            if islogical(self.intValue)
-                self.intValue = uint32(self.intValue);
-            elseif strcmpi(self.type,'int32')
-                self.intValue = typecast(int32(self.intValue),'uint32');
-            elseif strcmpi(self.type,'int16')
-                self.intValue = uint32(typecast(int16(self.intValue),'uint16'));
-            end
-            %
-            % Set the appropriate register values
-            %
-            if numel(self.regs) == 1
-                self.regs.set(self.intValue,self.bits);
+            %   
+            %   If SELF is an array of elements, V must be an array of the
+            %   same length, and SET will loop through the pairs of SELF
+            %   and V
+            if numel(self) > 1
+                for nn = 1:numel(self)
+                    self(nn).set(v(nn),varargin{:});
+                end
             else
-                tmp = uint64(self.intValue);
-                for nn=1:numel(self.regs)
-                    self.regs(nn).set(tmp,self.bits(nn,:));
-                    tmp = bitshift(tmp,-abs(diff(self.bits(nn,:)))-1);
+                %
+                % Check limits first, then convert to integer and check that
+                % the value will fit in the registers
+                %
+                if ~ischar(v) && ~isstring(v)
+                    self.checkLimits(v);
+                end
+                tmp = self.toInteger(v,varargin{:});
+                if log2(double(tmp)) > self.numbits
+                    error('Value will not fit in bit range with %d bits',self.numbits);
+                end
+                %
+                % Set the value and the integer value
+                %
+                self.value = v;
+                self.intValue = tmp;
+                %
+                % Convert that integer value to the appropriate data type and
+                % type cast it to a uint32 value
+                %
+                if islogical(self.intValue)
+                    self.intValue = uint32(self.intValue);
+                elseif strcmpi(self.type,'int32')
+                    self.intValue = typecast(int32(self.intValue),'uint32');
+                elseif strcmpi(self.type,'int16')
+                    self.intValue = uint32(typecast(int16(self.intValue),'uint16'));
+                end
+                %
+                % Set the appropriate register values
+                %
+                if numel(self.regs) == 1
+                    self.regs.set(self.intValue,self.bits);
+                else
+                    tmp = uint64(self.intValue);
+                    for nn=1:numel(self.regs)
+                        self.regs(nn).set(tmp,self.bits(nn,:));
+                        tmp = bitshift(tmp,-abs(diff(self.bits(nn,:)))-1);
+                    end
                 end
             end
         end
