@@ -28,6 +28,9 @@ classdef DeviceParameter < handle
             %   SELF = DEVICEPARAMETER(__,TYPE) sets the data type of the
             %   parameter.  Can be 'uint32', 'int32', or 'int16'
             %
+            if nargin == 0
+                return
+            end
             
             self.regs = regIn;
             self.bits = bits;
@@ -166,6 +169,9 @@ classdef DeviceParameter < handle
             %   same length, and SET will loop through the pairs of SELF
             %   and V
             if numel(self) > 1
+                if numel(v) == 1
+                    v = repmat(v,numel(self),1);
+                end
                 for nn = 1:numel(self)
                     self(nn).set(v(nn),varargin{:});
                 end
