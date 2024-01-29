@@ -376,6 +376,22 @@ classdef DeviceParameter < handle
             end
         end
         
+        function self =  loadstruct(self,s)
+            if numel(self) == 1
+                self.bits = s.bits;
+                self.upperLimit = s.upperLimit;
+                self.lowerLimit = s.lowerLimit;
+                self.type = s.type;
+                self.value = s.value;
+                self.toIntegerFunction = s.toIntegerFunction;
+                self.fromIntegerFunction = s.fromIntegerFunction;
+            else
+                for nn = 1:numel(self)
+                    self(nn).loadstruct(s(nn));
+                end
+            end
+        end
+        
     end
     
 end
