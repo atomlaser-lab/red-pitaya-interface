@@ -382,9 +382,9 @@ classdef DeviceParameter < handle
                 self.upperLimit = s.upperLimit;
                 self.lowerLimit = s.lowerLimit;
                 self.type = s.type;
-                self.value = s.value;
                 self.toIntegerFunction = s.toIntegerFunction;
                 self.fromIntegerFunction = s.fromIntegerFunction;
+                self.set(s.value);
             else
                 for nn = 1:numel(self)
                     self(nn).loadstruct(s(nn));
