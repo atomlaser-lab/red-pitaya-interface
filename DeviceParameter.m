@@ -260,7 +260,11 @@ classdef DeviceParameter < handle
             else
                 r = zeros(numel(self),1);
                 for nn = 1:numel(self)
-                    r(nn) = self(nn).get;
+                    if nargout > 0
+                        r(nn) = self(nn).get;
+                    else
+                        self(nn).get;
+                    end
                 end
             end
         end
