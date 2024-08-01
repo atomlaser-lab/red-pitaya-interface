@@ -172,7 +172,7 @@ classdef DeviceParameter < handle
                 if numel(v) == 1
                     v = repmat(v,numel(self),1);
                 end
-                for nn = 1:numel(self)
+                for nn = 1:min(numel(self),numel(v))
                     self(nn).set(v(nn),varargin{:});
                 end
             else
