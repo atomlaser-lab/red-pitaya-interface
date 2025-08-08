@@ -1,7 +1,8 @@
 import subprocess
 import struct
 
-MEM_ADDR = 0x40000000
+RAW_DATA_FILE = "SavedData.bin"
+WRITE_DATA_FILE = "data-to-write.bin"
 
 def write(data,header):
     response = {"err":False,"errMsg":"","data":b''}
@@ -19,7 +20,7 @@ def write(data,header):
         # interleaved addresses and data can be sent
         #
         for i in range(0,len(data),2):
-            addr = MEM_ADDR + data[i]
+            addr = data[i]
             cmd = ['monitor',format(addr),'0x' + '{:0>8x}'.format(data[i+1])]
             if ("print" in header) and (header["print"]):
                 print("Command: ",cmd)
@@ -37,7 +38,7 @@ def write(data,header):
         # can be sent
         #
         for i in range(0,len(data)):
-            addr = MEM_ADDR + data[i]
+            addr = data[i]
             cmd = ['monitor',format(addr)]
             if ("print" in header) and (header["print"]):
                 print("Command: ",cmd)
@@ -55,7 +56,7 @@ def write(data,header):
         # If there is data to write (len(data) > 1), then write that to a file
         #
         if len(data) > 1:
-            fid = open("data-to-write.bin","wb")
+            fid = open(WRITE_DATA_FILE,"wb")
             newData = []
             for i in range(1,len(data)):
                 fid.write(struct.pack("<I",data[i]))
@@ -91,7 +92,7 @@ def write(data,header):
                 if ("file_name" in header):
                     fid = open(header["file_name"],"rb")
                 else:
-                    fid = open("SavedData.bin","rb")
+                    fid = open(RAW_DATA_FILE,"rb")
                 response["data"] = fid.read()
                 fid.close()
     

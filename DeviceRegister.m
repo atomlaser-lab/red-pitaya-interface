@@ -8,25 +8,30 @@ classdef DeviceRegister < handle
     end
     
     properties(Access = protected)
+        addr_offset %Address offset
         conn        %A CONNECTIONCLIENT object to use for writing/reading data
     end
     
     properties(Constant)
-        ADDR_OFFSET = uint32(hex2dec('40000000'));  %Offset of all addresses
-        MAX_ADDR = uint32(hex2dec('3fffffff'));     %Maximum address relative to offset
+        DEFAULT_ADDR_OFFSET = 0x40000000;   %Offset of all addresses
+        MAX_ADDR = 0x3fffffff;              %Maximum address relative to offset
     end
     
     methods
-        function self = DeviceRegister(addr,conn,read_only)
+        function self = DeviceRegister(addr,conn,read_only,addr_offset)
             %DEVICEREGISTER Constructs an object
             %
             %   SELF = DEVICEREGISTER(ADDR,CONN) creates an object with
             %   associated address and connection object.  The value of the
-            %   register is initialized to 0. READ_ONLY property is set to false
+            %   register is initialized to 0. READ_ONLY property is set to false, 
+            %   addr_offset is set to the default value
             %
             %   SELF = DEVICEREGISTER(ADDR,CONN,READ_ONLY) creates an object with
             %   associated address and connection object.  The value of the
             %   register is initialized to 0.  READ_ONLY property is set.
+            %
+            %   SELF = DEVICEREGISTER(ADDR,CONN,READ_ONLY,ADDR_OFFSET) also sets the
+            %   addr_offset property.
             
             if nargin > 0
                 self.addr = addr;
@@ -40,6 +45,11 @@ classdef DeviceRegister < handle
             else
                 self.read_only = read_only;
             end
+            if nargin < 4
+                self.addr_offset = DeviceRegister.DEFAULT_ADDR_OFFSET;
+            else
+                self.addr_offset = addr_offset;
+            end
         end
     
         function set.addr(self,addr)
@@ -48,7 +58,7 @@ classdef DeviceRegister < handle
                 addr = hex2dec(addr);
             end
 
-            if addr<0 || addr>self.MAX_ADDR
+            if addr < 0 || addr > self.MAX_ADDR
                 error('Address is out of range [%08x,%08x]',0,self.MAX_ADDR);
             else
                 self.addr = uint32(addr);
@@ -73,7 +83,7 @@ classdef DeviceRegister < handle
             %   V = GET(SELF,BITS) returns the value V of the register SELF
             %   for bit range BITS (a 2 element vector) 
             mask = intmax('uint32');
-            mask = bitshift(bitshift(mask,bits(2)-bits(1)+1-32),bits(1));
+            mask = bitshift(bitshift(mask,bits(2) - bits(1) + 1 - 32),bits(1));
             v = bitshift(bitand(self.value,mask),-bits(1));
         end
         
@@ -95,7 +105,7 @@ classdef DeviceRegister < handle
             %   R = GETWRITEDATA(SELF) Returns the data to be written R for
             %   register SELF
             if numel(self) == 1
-                r = [self.addr,self.value];
+                r = [self.addr_offset + self.addr,self.value];
             else
                 r = zeros(numel(self),2);
                 for nn = 1:numel(self)
@@ -111,7 +121,7 @@ classdef DeviceRegister < handle
             %   R = GETREADDATA(SELF) Returns the data as R for register
             %   SELF
             if numel(self) == 1
-                r = self.addr;
+                r = self.addr_offset + self.addr;
             else
                 r = zeros(numel(self),1);
                 for nn = 1:numel(self)
@@ -126,7 +136,7 @@ classdef DeviceRegister < handle
             %   SELF = READ(SELF) reads the register value and stores it in
             %   the object SELF
             if numel(self) == 1
-                self.conn.write(self.addr,'mode','read');
+                self.conn.write(self.addr_offset + self.addr,'mode','read');
                 self.value = self.conn.recvMessage;
             else
                 for nn=1:numel(self)
@@ -145,7 +155,7 @@ classdef DeviceRegister < handle
                 s = sprintf(['% ',num2str(width),'s: %08x\n'],name,self.value);
             else
                 for nn = 1:numel(self)
-                    labelNew = sprintf('%s(%d)',name,nn-1);
+                    labelNew = sprintf('%s(%d)',name,nn - 1);
                     s{nn} = self(nn).print(labelNew,width); %#ok<AGROW>
                 end
             end

@@ -20,6 +20,9 @@ if len(sys.argv) < 2:
     sfile = os.path.dirname(os.path.abspath(__file__)) + '/get_ip.sh'
     r = subprocess.run([sfile],stdout=subprocess.PIPE)
     host = r.stdout.decode('ascii').rstrip()
+    if len(host) == 0:
+        r = subprocess.run([sfile,'-t','inet'],stdout=subprocess.PIPE)
+        host = r.stdout.decode('ascii').rstrip()
     port = 6666
 elif len(sys.argv) == 2:
     host = sys.argv[1]
