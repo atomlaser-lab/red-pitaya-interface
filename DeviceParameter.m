@@ -255,7 +255,7 @@ classdef DeviceParameter < handle
                     tmp = tmp + uint64(self.regs(1).get(self.bits(1,:)));
                     self.intValue = tmp;
                 end
-                self.value = self.fromInteger(double(v),varargin{:});
+                self.value = self.fromInteger(double(self.intValue),varargin{:});
                 r = self.value;
             else
                 r = zeros(numel(self),1);
