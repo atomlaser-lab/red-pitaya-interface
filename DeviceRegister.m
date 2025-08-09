@@ -89,11 +89,11 @@ classdef DeviceRegister < handle
         
         function self = write(self)
             %WRITE Writes the value of the register to the device
-            if numel(self) == 1
-                data = [self.addr,self.value];
+            if isscalar(self)
+                data = [self.addr_offset + self.addr,self.value];
                 self.conn.write(data,'mode','write');
             else
-                for nn=1:numel(self)
+                for nn = 1:numel(self)
                     self(nn).write;
                 end
             end
@@ -104,23 +104,29 @@ classdef DeviceRegister < handle
             %
             %   R = GETWRITEDATA(SELF) Returns the data to be written R for
             %   register SELF
-            if numel(self) == 1
-                r = [self.addr_offset + self.addr,self.value];
+            if isscalar(self)
+                if self.read_only
+                    r = [];
+                else
+                    r = [self.addr_offset + self.addr,self.value];
+                end
             else
-                r = zeros(numel(self),2);
+                r = [];
                 for nn = 1:numel(self)
-                    r(nn,:) = self(nn).getWriteData;
+                    if ~self(nn).read_only
+                        r(end + 1,:) = self(nn).getWriteData; %#ok<*AGROW>
+                    end
                 end
             end
         end
         
-        function r = getReadData(self)
+        function [r,self] = getReadData(self)
             %GETREADDATA Returns the data sent to the server to initiate a
             %read operation
             %
-            %   R = GETREADDATA(SELF) Returns the data as R for register
-            %   SELF
-            if numel(self) == 1
+            %   [R,SELF] = GETREADDATA(SELF) Returns the data as R for
+            %   register SELF
+            if isscalar(self)
                 r = self.addr_offset + self.addr;
             else
                 r = zeros(numel(self),1);
@@ -135,7 +141,7 @@ classdef DeviceRegister < handle
             %
             %   SELF = READ(SELF) reads the register value and stores it in
             %   the object SELF
-            if numel(self) == 1
+            if isscalar(self)
                 self.conn.write(self.addr_offset + self.addr,'mode','read');
                 self.value = self.conn.recvMessage;
             else
@@ -151,7 +157,7 @@ classdef DeviceRegister < handle
             %   PRINT(SELF,NAME,WIDTH) prints a string describing the
             %   register with NAME having a width WIDTH
             
-            if numel(self) == 1
+            if isscalar(self)
                 s = sprintf(['% ',num2str(width),'s: %08x\n'],name,self.value);
             else
                 for nn = 1:numel(self)

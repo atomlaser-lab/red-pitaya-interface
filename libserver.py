@@ -8,11 +8,12 @@ import appcontroller
 
 
 class Message:
-    def __init__(self,selector,sock,addr):
+    def __init__(self,selector,sock,addr,suppress_messages):
         self.selector = selector
         self.sock = sock
         self.addr = addr
         self.keep_alive = False
+        self.suppress_messages = suppress_messages
         self._reset()
 
     def _reset(self):
@@ -66,7 +67,8 @@ class Message:
                 pass
             else:
                 self._send_buffer = self._send_buffer[sent:]    #Retains only data from index sent to end of array of bytes
-                print("Bytes sent: %d, Bytes Remaining: %d" % (sent, len(self._send_buffer)))
+                if not self.suppress_messages:
+                    print("Bytes sent: %d, Bytes Remaining: %d" % (sent, len(self._send_buffer)))
                 #Close when the buffer is empty - binary data is true if not empty
                 if sent and not self._send_buffer:
                     if self.keep_alive:
@@ -102,7 +104,8 @@ class Message:
 
     def close(self):
         #Closes the socket connection
-        print("Closing connection (%s, %s)" % self.addr,end='\n\n')
+        if not self.suppress_messages:
+            print("Closing connection (%s, %s)" % self.addr,end='\n\n')
         try:
             self.selector.unregister(self.sock)
         except Exception as e:
@@ -129,9 +132,9 @@ class Message:
                 self.keep_alive = self.header["keep_alive"]
             else:
                 self.keep_alive = False
-
-            print("Header received by server:")
-            print(self.header)
+            if not self.suppress_messages:
+                print("Header received by server:")
+                print(self.header)
             self._recv_buffer = self._recv_buffer[self.header_len:]
 
     def process_request(self):
@@ -149,7 +152,8 @@ class Message:
             
             #Write data using io-controller
             self.fpga_response = appcontroller.write(pmsg,self.header)
-            print("Header written to client:")
+            if not self.suppress_messages:
+                print("Header written to client:")
             #At end of reading of data, set class to write mode
             self._set_selector_events_mask("w")
 
@@ -161,7 +165,8 @@ class Message:
         # Make header
         #
         json_str = json.dumps(self.fpga_response)
-        print(json_str)
+        if not self.suppress_messages:
+            print(json_str)
         tmp = json_str.encode('ascii')
         self._send_buffer = struct.pack("<H",len(tmp)) + tmp
         #Append data
