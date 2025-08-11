@@ -93,11 +93,29 @@ def write(data,header):
                     fid = open(header["file_name"],"rb")
                 else:
                     fid = open(RAW_DATA_FILE,"rb")
+
                 response["data"] = fid.read()
                 fid.close()
+
+    elif header["mode"] == "read_file":
+        if "file_name" in header:
+            fid = open(header["file_name"],"rb")
+        else:
+            response = {"err":True,"errMsg":"No filename given for read_file operation","data":b''}
+            return response
+
+        if ("file_start_byte" in header):
+            fid.seek(header["file_start_byte"])
+
+        if "file_num_bytes" in header:
+            response["data"] = fid.read(header["file_num_bytes"])
+        else:
+            response["data"] = fid.read()
+        fid.close()
+        result = None
     
     
-    if result.returncode != 0:
+    if (result != None) and result.returncode != 0:
         response = {"err":True,"errMsg":"Bus error","data":b''}
 
     return response
