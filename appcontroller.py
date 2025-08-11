@@ -67,7 +67,10 @@ def write(data,header):
         cmd = header["cmd"]
         if ("print" in header) and (header["print"]):
             print("Command: ",cmd)
-        result = subprocess.run(cmd,stdout=subprocess.PIPE)
+        if ("no_data" in header) and (header["no_data"]):
+            result = subprocess.run(cmd,stdout=subprocess.DEVNULL)
+        else:
+            result = subprocess.run(cmd,stdout=subprocess.PIPE)
 
         if result.returncode == 0:
             #
@@ -78,11 +81,14 @@ def write(data,header):
                 # Read the data from the terminal as text and then convert it
                 # into binary
                 #
-                data = result.stdout.decode('ascii').rstrip()
-                if len(data) > 0:
-                    buf = struct.pack("<I",int(data,16))
-                else:
+                if ("no_data" in header) and (header["no_data"]):
                     buf = b''
+                else:
+                    data = result.stdout.decode('ascii').rstrip()
+                    if len(data) > 0:
+                        buf = struct.pack("<I",int(data,16))
+                    else:
+                        buf = b''
                 response["data"] += buf
 
             elif header["return_mode"] == "file":
