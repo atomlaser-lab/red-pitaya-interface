@@ -72,7 +72,7 @@ classdef DeviceRegister < handle
             %   SELF in the bit range given by BITS to V.
             tmp = self.value;
             mask = intmax('uint32');
-            mask = bitshift(bitshift(mask,bits(2)-bits(1)+1-32),bits(1));
+            mask = bitshift(bitshift(mask,bits(2) - bits(1) + 1 - 32),bits(1));
             v = bitshift(uint32(v),bits(1));
             self.value = bitor(bitand(tmp,bitcmp(mask)),v);
         end

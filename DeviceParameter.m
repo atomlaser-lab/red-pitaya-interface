@@ -46,14 +46,14 @@ classdef DeviceParameter < handle
             
             if nargin < 3
                 self.type = 'uint32';
-            elseif strcmp(type,'int32') || strcmp(type,'uint32') || strcmp(type,'int16') || strcmp(type,'int8')
+            elseif strcmp(type,'int32') || strcmp(type,'uint32') || strcmp(type,'uint64') || strcmp(type,'int16') || strcmp(type,'int8')
                 self.type = type;
             else
-                error('Type must be either ''uint32'', ''int32'', or ''int16'' or ''int8''!');
+                error('Type must be either ''uint64'', ''uint32'', ''int32'', or ''int16'' or ''int8''!');
             end
             
-            if numel(self.regs) > 1 && ~strcmpi(self.type,'uint32')
-                error('When the number of registers is larger than 1, type must be ''uint32''!');
+            if numel(self.regs) > 1 && ~(strcmpi(self.type,'uint64') || strcmpi(self.type,'uint32'))
+                error('When the number of registers is larger than 1, type must be ''uint32'' or ''uint64''!');
             end
         end
         
@@ -169,7 +169,7 @@ classdef DeviceParameter < handle
             %   same length, and SET will loop through the pairs of SELF
             %   and V
             if numel(self) > 1
-                if numel(v) == 1
+                if isscalar(numel(v))
                     v = repmat(v,numel(self),1);
                 end
                 for nn = 1:min(numel(self),numel(v))
@@ -194,10 +194,14 @@ classdef DeviceParameter < handle
                 self.intValue = tmp;
                 %
                 % Convert that integer value to the appropriate data type and
-                % type cast it to a uint32 value
+                % type cast it to an unsigned value of the right length
                 %
                 if islogical(self.intValue)
                     self.intValue = uint32(self.intValue);
+                elseif strcmpi(self.type,'uint32')
+                    self.intValue = typecast(uint32(self.intValue),'uint32');
+                elseif strcmpi(self.type,'uint64')
+                    self.intValue = typecast(uint64(self.intValue),'uint64');
                 elseif strcmpi(self.type,'int32')
                     self.intValue = typecast(int32(self.intValue),'uint32');
                 elseif strcmpi(self.type,'int16')
@@ -208,13 +212,19 @@ classdef DeviceParameter < handle
                 %
                 % Set the appropriate register values
                 %
-                if numel(self.regs) == 1
+                if isscalar(self.regs)
                     self.regs.set(self.intValue,self.bits);
                 else
                     tmp = uint64(self.intValue);
+                    bit_min = 0;
                     for nn = 1:numel(self.regs)
-                        self.regs(nn).set(tmp,self.bits(nn,:));
-                        tmp = bitshift(tmp,-abs(diff(self.bits(nn,:)))-1);
+                        % mask = uint64(intmax('uint32'));
+                        bit_max = self.bits(nn,2) - self.bits(nn,1) + bit_min;
+                        mask = bitxor(uint64(2^(bit_max + 1) - 1),uint64(2^bit_min - 1));
+                        v = bitshift(bitand(tmp,mask),-32*(nn - 1));
+                        self.regs(nn).set(v,self.bits(nn,:));
+                        bit_min = bit_max + 1;
+                        % tmp = bitshift(tmp,-abs(diff(self.bits(nn,:)))-1);
                     end
                 end
             end
