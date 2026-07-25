@@ -184,7 +184,7 @@ classdef DeviceParameter < handle
                     self.checkLimits(v);
                 end
                 tmp = self.toInteger(v,varargin{:});
-                if log2(double(tmp)) > self.numbits
+                if log2(abs(double(tmp))) > self.numbits
                     error('Value will not fit in bit range with %d bits',self.numbits);
                 end
                 %
@@ -237,8 +237,8 @@ classdef DeviceParameter < handle
             %   R = GET(SELF) Returns the physical value of the parameter
             %   associated with DEVICEPARAMETER SELF
             
-            if numel(self) == 1
-                if numel(self.regs) == 1
+            if isscalar(self)
+                if isscalar(self.regs)
                     %
                     % When there is only one register, read the data from the
                     % register according to the parameter data type
@@ -253,6 +253,7 @@ classdef DeviceParameter < handle
                     elseif strcmpi(self.type,'int8')
                         v = typecast(uint8(self.intValue),'int8');
                     end
+                    self.value = self.fromInteger(double(v),varargin{:});
                 else
                     %
                     % When there is more than one register, read the data from
@@ -264,8 +265,8 @@ classdef DeviceParameter < handle
                     end
                     tmp = tmp + uint64(self.regs(1).get(self.bits(1,:)));
                     self.intValue = tmp;
+                    self.value = self.fromInteger(double(self.intValue),varargin{:});
                 end
-                self.value = self.fromInteger(double(self.intValue),varargin{:});
                 r = self.value;
             else
                 r = zeros(numel(self),1);
@@ -283,13 +284,13 @@ classdef DeviceParameter < handle
             %READ Reads data from the device through the action of the
             %DEVICEREGISTER read() method
             
-            if numel(self) == 1
-                for nn=1:numel(self.regs)
+            if isscalar(self)
+                for nn = 1:numel(self.regs)
                     self.regs(nn).read;
                 end
                 self.get;
             else
-                for nn=1:numel(self)
+                for nn = 1:numel(self)
                     self(nn).read;
                 end
             end
@@ -298,7 +299,7 @@ classdef DeviceParameter < handle
         function self = write(self)
             %WRITE writes the parameter to the device via the
             %DEVICEREGISTER write() method
-            if numel(self) == 1
+            if isscalar(self)
                 for nn=1:numel(self.regs)
                     self.regs(nn).write;
                 end
@@ -327,7 +328,7 @@ classdef DeviceParameter < handle
         end
         
         function disp(self)
-            if numel(self) == 1
+            if isscalar(self)
                 fprintf(1,'\t DeviceParameter with properties:\n');
                 if size(self.bits,1) == 1
                     fprintf(1,'\t\t            Bit range: [%d,%d]\n',self.bits(1),self.bits(2));
@@ -336,7 +337,7 @@ classdef DeviceParameter < handle
                         fprintf(1,'\t\t  Bit range for reg %d: [%d,%d]\n',nn-1,self.bits(nn,1),self.bits(nn,2)); 
                     end
                 end
-                if isnumeric(self.value) && numel(self.value)==1
+                if isnumeric(self.value) && isscalar(self)
                     fprintf(1,'\t\t       Physical value: %.4g\n',self.value);
                 elseif isnumeric(self.value) && numel(self.value)<=10
                     fprintf(1,'\t\t       Physical value: [%s]\n',strtrim(sprintf('%.4g ',self.value)));
@@ -345,7 +346,7 @@ classdef DeviceParameter < handle
                 elseif ischar(self.value)
                     fprintf(1,'\t\t       Physical value: %s\n',self.value);
                 end
-                if numel(self.intValue)==1
+                if isscalar(self.intValue)
                     fprintf(1,'\t\t        Integer value: %d\n',self.intValue);
                 elseif numel(self.value)<=10
                     fprintf(1,'\t\t        Integer value: [%s]\n',strtrim(sprintf('%d ',self.intValue)));
@@ -375,7 +376,7 @@ classdef DeviceParameter < handle
         
         function s = struct(self)
             %STRUCT Creates a struct from the object
-            if numel(self) == 1
+            if isscalar(self)
                 s.bits = self.bits;
                 s.upperLimit = self.upperLimit;
                 s.lowerLimit = self.lowerLimit;
@@ -391,7 +392,7 @@ classdef DeviceParameter < handle
         end
         
         function self =  loadstruct(self,s)
-            if numel(self) == 1
+            if isscalar(self)
                 self.bits = s.bits;
                 self.upperLimit = s.upperLimit;
                 self.lowerLimit = s.lowerLimit;

@@ -6,9 +6,12 @@ classdef DeviceRegister < handle
         value       %The value of the register as a uint32 integer
         read_only   %Boolean value indicating if register is read-only
     end
+
+    properties(SetAccess = protected)
+        addr_offset %Address offset
+    end
     
     properties(Access = protected)
-        addr_offset %Address offset
         conn        %A CONNECTIONCLIENT object to use for writing/reading data
     end
     
@@ -18,7 +21,7 @@ classdef DeviceRegister < handle
     end
     
     methods
-        function self = DeviceRegister(addr,conn,read_only,addr_offset)
+        function self = DeviceRegister(addr,conn,varargin)
             %DEVICEREGISTER Constructs an object
             %
             %   SELF = DEVICEREGISTER(ADDR,CONN) creates an object with
@@ -32,6 +35,10 @@ classdef DeviceRegister < handle
             %
             %   SELF = DEVICEREGISTER(ADDR,CONN,READ_ONLY,ADDR_OFFSET) also sets the
             %   addr_offset property.
+            %
+            %   SELF = DEVICEREGISTER(ADDR,CONN,ADDR_OFFSET) sets the
+            %   addr_offset property with READ_ONLY set to false if
+            %   ADDR_OFFSET is a uint32 integer
             
             if nargin > 0
                 self.addr = addr;
@@ -40,16 +47,23 @@ classdef DeviceRegister < handle
                     self.conn = conn;
                 end
             end
-            if nargin < 3
-                self.read_only = false;
-            else
-                self.read_only = read_only;
+            switch numel(varargin)
+                case 0
+                    self.read_only = false;
+                    self.addr_offset = DeviceRegister.DEFAULT_ADDR_OFFSET;
+                case 1
+                    if isa(varargin{1},"uint32")
+                        self.read_only = false;
+                        self.addr_offset = varargin{1};
+                    else
+                        self.read_only = varargin{1};
+                        self.addr_offset = DeviceRegister.DEFAULT_ADDR_OFFSET;
+                    end
+                case 2
+                    self.read_only = varargin{1};
+                    self.addr_offset = varargin{2};
             end
-            if nargin < 4
-                self.addr_offset = DeviceRegister.DEFAULT_ADDR_OFFSET;
-            else
-                self.addr_offset = addr_offset;
-            end
+
         end
     
         function set.addr(self,addr)
@@ -71,6 +85,9 @@ classdef DeviceRegister < handle
             %   SELF = SET(SELF,V,BITS) Changes the value of the register
             %   SELF in the bit range given by BITS to V.
             tmp = self.value;
+            if isempty(tmp)
+                tmp = uint32(0);
+            end
             mask = intmax('uint32');
             mask = bitshift(bitshift(mask,bits(2) - bits(1) + 1 - 32),bits(1));
             v = bitshift(uint32(v),bits(1));
@@ -145,7 +162,7 @@ classdef DeviceRegister < handle
                 self.conn.write(self.addr_offset + self.addr,'mode','read');
                 self.value = self.conn.recvMessage;
             else
-                for nn=1:numel(self)
+                for nn = 1:numel(self)
                     self(nn).read;
                 end
             end
