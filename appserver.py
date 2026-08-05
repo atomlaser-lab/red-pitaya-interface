@@ -32,11 +32,13 @@ port = args.port    #Default is 6666 from argparse
 suppress_output = args.suppress_output  #Default is false
 
 #
-# Define socket acceptance wrapper
-#
+# Selectors uses the system select() function to poll file objects for events.
+# 
 sel = selectors.DefaultSelector()
-
-def acceptWrapper(sock):
+#
+# Define socket acceptance function when a client connects to the socket server
+#
+def accept_wrapper(sock):
     conn, addr = sock.accept()
     if not suppress_output:
         print("Client (%s, %s) connected" % addr)
@@ -44,22 +46,28 @@ def acceptWrapper(sock):
     message = libserver.Message(sel,conn,addr,suppress_output)
     sel.register(conn,selectors.EVENT_READ,data=message)
 
-
+#
+# This creates the actual socket server that listens for client connections
+#
 lsock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 lsock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR, 1)
 lsock.bind((host,port))
 lsock.listen()
 print("Listening on", (host,port))
 lsock.setblocking(False)
+# Register this socket server with selectors so that we can respond to new client connections
 sel.register(lsock,selectors.EVENT_READ,data=None)
 
 try:
     while True:
+        # Find all registered connections with an event - can be new connections or actions by existing connections
         events = sel.select(timeout=None)
         for key,mask in events:
             if key.data is None:
-                acceptWrapper(key.fileobj)
+                # If there is no data, then it must be a new connection
+                accept_wrapper(key.fileobj)
             else:
+                # Else, process that message
                 message = key.data
                 try:
                     message.process_events(mask)

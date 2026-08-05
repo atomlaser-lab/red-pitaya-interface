@@ -28,7 +28,7 @@ class Message:
         self.response_created = False
 
     def _set_selector_events_mask(self,mode):
-        #Sets the selector's event mask to r, w, or rw/wr
+        # Sets the selector's event mask to r, w, or rw/wr
         if mode == "r":
             events = selectors.EVENT_READ
         elif mode == "w":
@@ -40,36 +40,37 @@ class Message:
         self.selector.modify(self.sock,events,data=self)
 
     def _read(self):
-        #Internal read function, reads up to 4096 bytes from socket
+        # Internal read function, reads up to 4096 bytes from socket
         try:
-            #Socket should be ready to read
+            # Socket should be ready to read
             data = self.sock.recv(4096)
         except BlockingIOError:
-            #Resource temporarily unavailable
+            # Resource temporarily unavailable
             pass
         else:
             if data:
-                #If valid data is received, add it to recv buffer
+                # If valid data is received, add it to recv buffer
                 self._recv_buffer += data
             else:
-                #If false, then the client has disconnected
+                # If false, then the client has disconnected
                 raise RuntimeError("Peer closed.")
 
     def _write(self):
-        #Internal write function
+        # Internal write function
         if self._send_buffer:
-            #If there is valid data in the send buffer
+            # If there is valid data in the send buffer
             try:
-                #Should be ready to write
-                sent = self.sock.send(self._send_buffer)    #sent is the number of bytes sent
+                # Should be ready to write, sent is number of bytes sent
+                sent = self.sock.send(self._send_buffer)
             except BlockingIOError:
-                #Resource temporarily unavailable
+                # Resource temporarily unavailable
                 pass
             else:
-                self._send_buffer = self._send_buffer[sent:]    #Retains only data from index sent to end of array of bytes
+                # Retains only data from index sent to end of array of bytes
+                self._send_buffer = self._send_buffer[sent:]    
                 if not self.suppress_messages:
                     print("Bytes sent: %d, Bytes Remaining: %d" % (sent, len(self._send_buffer)))
-                #Close when the buffer is empty - binary data is true if not empty
+                # Close when the buffer is empty - binary data is true if not empty
                 if sent and not self._send_buffer:
                     if self.keep_alive:
                         self._set_selector_events_mask("r")
@@ -78,32 +79,32 @@ class Message:
                         self.close()
 
     def read(self):
-        #This function is called repeatedly by socket event loop. Processes header and message data
+        # This function is called repeatedly by socket event loop. Processes header and message data
         self._read()
 
-        #First step is to process header length
+        # First step is to process header length
         if self.header_len is None:
             self.process_proto_header()
 
-        #Second step is to process the header
+        # Second step is to process the header
         if self.msg_len is None:
             self.process_header()
 
-        #Last step is to process the message
+        # Last step is to process the message
         if self.msg is None:
             self.process_request()
 
     def write(self):
-        #This function is called repeatedly until a response is ready to be sent
-        #If message has been received
+        # This function is called repeatedly until a response is ready to be sent
+        # If message has been received
         if self.msg:
-            #If the response hasn't been created (None is converted into boolean False)
+            # If the response hasn't been created (None is converted into boolean False)
             if not self.response_created:
                 self.create_response()
         self._write()
 
     def close(self):
-        #Closes the socket connection
+        # Closes the socket connection
         if not self.suppress_messages:
             print("Closing connection (%s, %s)" % self.addr,end='\n\n')
         try:
@@ -111,19 +112,18 @@ class Message:
         except Exception as e:
             print("Error: selector.unregister() exception for {}: {}".format(self.addr,repr(e)))
         finally:
-            #Delete reference to socket object for garbage collection
+            # Delete reference to socket object for garbage collection
             self.sock = None
 
     def process_proto_header(self):
-        #This function retrieves the header from the message
+        # This function retrieves the header from the message
         proto_len = 2
         if len(self._recv_buffer) >= proto_len:
             self.header_len = struct.unpack("<H",self._recv_buffer[:proto_len])[0]
             self._recv_buffer = self._recv_buffer[proto_len:]
 
-
     def process_header(self):
-        #This function processes the header
+        # This function processes the header
         if len(self._recv_buffer) >= self.header_len:
             self.header = json.loads(self._recv_buffer[:self.header_len].decode('ascii'))
             self.msg_len = 4*self.header["length"]
@@ -138,7 +138,7 @@ class Message:
             self._recv_buffer = self._recv_buffer[self.header_len:]
 
     def process_request(self):
-        #Processes the message
+        # Processes the message
         if len(self._recv_buffer) >= self.msg_len:
             self.msg = self._recv_buffer[:self.msg_len]
             pmsg = []
@@ -150,31 +150,27 @@ class Message:
             
             self._recv_buffer = self._recv_buffer[self.msg_len:]
             
-            #Write data using io-controller
+            # Write data using io-controller
             self.fpga_response = appcontroller.write(pmsg,self.header)
             if not self.suppress_messages:
                 print("Header written to client:")
-            #At end of reading of data, set class to write mode
+            # At end of reading of data, set class to write mode
             self._set_selector_events_mask("w")
 
-    
     def create_response(self):
+        # Get data
         data = self.fpga_response.pop("data")
         self.fpga_response["length"] = len(data)
-        #
         # Make header
-        #
         json_str = json.dumps(self.fpga_response)
         if not self.suppress_messages:
             print(json_str)
         tmp = json_str.encode('ascii')
         self._send_buffer = struct.pack("<H",len(tmp)) + tmp
-        #Append data
+        # Append data
         self._send_buffer += data
         self.response_created = True
-        
-
-            
+              
     def process_events(self,mask):
         if mask & selectors.EVENT_READ:
             self.read()
