@@ -3,11 +3,12 @@ import selectors
 import json
 import io
 import struct
+import socket
 
 import appcontroller
 
 
-class Message:
+class ServerConnection:
     def __init__(self,selector,sock,addr,suppress_messages):
         self.selector = selector
         self.sock = sock
@@ -126,7 +127,7 @@ class Message:
         # This function processes the header
         if len(self._recv_buffer) >= self.header_len:
             self.header = json.loads(self._recv_buffer[:self.header_len].decode('ascii'))
-            self.msg_len = 4*self.header["length"]
+            self.msg_len = self.header["length"]
 
             if ("keep_alive" in self.header):
                 self.keep_alive = self.header["keep_alive"]
@@ -176,3 +177,150 @@ class Message:
             self.read()
         if mask & selectors.EVENT_WRITE:
             self.write()
+
+
+class ClientConnection:
+    def __init__(self, target: tuple[str,int], keep_alive: bool=False, timeout:float=30):
+        """Creates a ClientConnection instance
+            
+        Arguments:
+        target -- a tuple of an IPv4 address (string) and port (int)
+        keep_alive -- Keep connection alive after data is received? (bool)
+        timeout -- Timeout of socket connection in seconds (float)
+        """
+        if not isinstance(target, tuple):
+            target = (target, 6666)
+        self.target = target
+        self.keep_alive = keep_alive
+        self.timeout = timeout
+        self._args = {}
+        self.sock = None
+        self._reset()
+
+    def _reset(self):
+        """Reset message properties to default values"""
+        self._recv_buffer = b""
+        self._send_buffer = b""
+        self.header_len = None
+        self.header = dict()
+        self.msg_len = None
+        self.msg = None
+        self.recv_data = []
+        self.recv_done = False
+
+    def _open(self):
+        """Opens a new connection to the server"""
+        self.sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        try:
+            self.sock.connect(self.target)
+        except ConnectionRefusedError:
+            print("Connection refused. Server is likely not running")
+        except Exception as e:
+            raise e
+
+    def write(self, data=[0], **kwargs):
+        """Write data to server"""
+        if data is None:
+            raise ValueError("Cannot write 'None' to server")
+
+        self.header["length"] = 4*len(data)
+        self.header["keep_alive"] = self.keep_alive
+        for key, value in kwargs.items():
+            self.header[key] = value
+
+        for key, value in self._args.items():
+            self.header[key] = value
+
+        self.header = json.dumps(self.header)
+        self.header_len = len(self.header)
+        self._send_buffer = struct.pack("<H",self.header_len)
+        self._send_buffer += self.header.encode("ascii")
+        self._send_buffer += struct.pack(f"<{len(data)}I",*data)
+
+        # Write data
+        self._write()
+        # Read response
+        while not self.recv_done:
+            self.read()
+        # Check for errors
+        if self.header["err"]:
+            raise ConnectionError("Connection returned error: {}".format(self.header["errMsg"]))
+
+    def read(self):
+        # This function is called repeatedly. Processes header and message data
+        self._read()
+
+        # First step is to process header length
+        if self.header_len is None:
+            self.process_proto_header()
+
+        # Second step is to process the header
+        if self.msg_len is None:
+            self.process_header()
+
+        # Last step is to process the message
+        if self.msg is None:
+            self.process_request()
+
+    def _read(self):
+        # Internal read function, reads up to 2**16 bytes from socket
+        try:
+            # Socket should be ready to read
+            data = self.sock.recv(2**16)
+        except BlockingIOError:
+            # Resource temporarily unavailable
+            pass
+        else:
+            if data:
+                # If valid data is received, add it to recv buffer
+                self._recv_buffer += data
+            else:
+                # If false, then the client has disconnected
+                raise RuntimeError("Timeout?")
+
+
+    def _write(self):
+        """Internal write function"""
+        if self.sock is None:
+            self._open()
+
+        while self._send_buffer:
+            try:
+                sent = self.sock.send(self._send_buffer)
+            except BlockingIOError:
+                # Resource temporarily unavailable
+                pass
+            else:
+                # Retains only data from index sent to end of byte array
+                self._send_buffer = self._send_buffer[sent:]
+                if sent and not self._send_buffer:
+                    # If all data has been sent, reset the message headers
+                    # and return
+                    self._reset()
+                    break
+
+    def process_proto_header(self):
+        # This function retrieves the header from the message
+        proto_len = 2
+        if len(self._recv_buffer) >= proto_len:
+            self.header_len = struct.unpack("<H",self._recv_buffer[:proto_len])[0]
+            self._recv_buffer = self._recv_buffer[proto_len:]
+
+    def process_header(self):
+        # This function processes the header
+        if len(self._recv_buffer) >= self.header_len:
+            self.header = json.loads(self._recv_buffer[:self.header_len].decode('ascii'))
+            self.msg_len = self.header["length"]
+            self._recv_buffer = self._recv_buffer[self.header_len:]
+
+    def process_request(self):
+        # Processes the message
+        if len(self._recv_buffer) >= self.msg_len:
+            self.msg = self._recv_buffer[:self.msg_len]
+            self.recv_data = []
+            for d in struct.iter_unpack("<I",self._recv_buffer[:self.msg_len]):
+                self.recv_data.append(d[0])
+            
+            self._recv_buffer = self._recv_buffer[self.msg_len:]
+            self.recv_done = True

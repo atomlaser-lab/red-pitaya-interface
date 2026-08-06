@@ -11,6 +11,7 @@ def write(data,header):
         #
         # This is for debugging purposes only
         #
+        response["data"] = struct.pack(f"<{len(data)}I",*data)
         response["errMsg"] = "Message received"
         return response     
 

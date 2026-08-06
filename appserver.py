@@ -43,8 +43,8 @@ def accept_wrapper(sock):
     if not suppress_output:
         print("Client (%s, %s) connected" % addr)
     conn.setblocking(False)
-    message = libserver.Message(sel,conn,addr,suppress_output)
-    sel.register(conn,selectors.EVENT_READ,data=message)
+    server_conn = libserver.ServerConnection(sel,conn,addr,suppress_output)
+    sel.register(conn,selectors.EVENT_READ,data=server_conn)
 
 #
 # This creates the actual socket server that listens for client connections
@@ -68,12 +68,12 @@ try:
                 accept_wrapper(key.fileobj)
             else:
                 # Else, process that message
-                message = key.data
+                server_conn = key.data
                 try:
-                    message.process_events(mask)
+                    server_conn.process_events(mask)
                 except Exception:
-                    print("main: error: exception for {}:\n{}".format(message.addr,traceback.format_exc()))
-                    message.close()
+                    print("main: error: exception for {}:\n{}".format(server_conn.addr,traceback.format_exc()))
+                    server_conn.close()
 
 except KeyboardInterrupt:
     print("Caught keyboard interrupt, exiting")

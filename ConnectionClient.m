@@ -141,8 +141,9 @@ classdef ConnectionClient < handle
                 %
                 % This is the header information.  It must contain a
                 % parameter indicating the length of the data payload
+                % Length is in NUMBER OF BYTES, and data is sent as uint32
                 %
-                msghdr.length = numel(data);
+                msghdr.length = 4*numel(data);
                 %
                 % Loop through header names and values
                 %
