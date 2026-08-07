@@ -129,18 +129,28 @@ class DeviceRegister:
             data = [self.offset + self.addr, self.value]
         return data
 
+    def get_read_data(self) -> tuple:
+        """Returns a tuple of data to read from device
+        
+        Returns ([address to read], [itself])
+        """
+        return ([self.offset + self.addr], [self])
+
     def read(self):
         """Reads data from device"""
-        self.conn.write(self.offset + self.addr, mode="read")
+        self.conn.write(self.get_read_data()[0][0], mode="read")
         self.value = self.conn.recv_data
+
+    def print(self, name, width=20):
+        return f"{name:{width}}: {self.value:#08x}\n"
 
     def __str__(self):
         s = (
             "DeviceRegister object with properties:\n" \
-            "   Address: 0x{0.addr:08x}\n" \
-            "   Value: 0x{0.value:08x}\n" \
+            "   Address:   {0.addr:#08x}\n" \
+            "   Value:     {0.value:#08x}\n" \
             "   Read-only: {0.read_only!r}\n" \
-            "   Offset: 0x{0.offset:08x}"
+            "   Offset:    {0.offset:#08x}"
             ).format(self)
         return s
 
@@ -206,6 +216,18 @@ class DeviceRegisterList(collections.UserList):
         for item in self.data:
             read_data.extend(item.get_read_data())
         return read_data
+
+    def print(self, name, width=20):
+        s = ""
+        for key, item in enumerate(self.data):
+            s += item.print(f"{name} {key}", width)
+        return s
+
+    def __str__(self):
+        s = ""
+        for item in self.data:
+            s += str(item) + "\n\n"
+        return s
 
 
 class DeviceParameter:
@@ -320,14 +342,17 @@ class DeviceParameter:
         """Writes parameter value to register and then to server"""
         self._regs.write()
 
+    def print(self, name, width=20, formatstr="d", units=""):
+        return f"{name:{width}}: {self.value:{formatstr}} {units}\n"
+
     def __str__(self):
         s = (
             "DeviceParameter object with properties:\n" \
-            "   Bit range: {0._bits}\n" \
-            "   Type: {0._type.name}\n" \
+            "   Bit range:      {0._bits}\n" \
+            "   Type:           {0._type.name}\n" \
             "   Physical value: {0.value}\n" \
-            "   UINT value: 0x{0._uint_value:0x}\n" \
-            "   Limits: [{0.lower_limit}, {0.upper_limit}]"
+            "   UINT value:     0x{0._uint_value:0x}\n" \
+            "   Limits:         [{0.lower_limit}, {0.upper_limit}]"
             ).format(self)
         return s
             
@@ -384,6 +409,12 @@ class DeviceParameterList(collections.UserList):
         for item in self.data:
             item.read()
 
+    def print(self, name, width=20, formatstr="d", units=""):
+        s = ""
+        for key, item in enumerate(self.data):
+            s += item.print(f"{name} {key}", width, formatstr, units)
+        return s
+
     def __str__(self):
         s = ""
         for item in self.data:
@@ -401,6 +432,11 @@ class DeviceSubModule(ABC):
         """Set default values"""
         pass
 
+    @abstractmethod
+    def print(self, width):
+        """Print information"""
+        pass
+
     def get_write_data(self):
         # p = self.__dict__
         d = []
@@ -414,8 +450,9 @@ class DeviceSubModule(ABC):
         R = []
         for value in self.__dict__.values():
             if hasattr(value,"get_read_data"):
-                d.append(value.get_read_data())
-                R.append(value)
+                tmp = value.get_read_data()
+                d.extend(tmp[0])
+                R.extend(tmp[1])
         return (d, R)
 
     def get(self):
