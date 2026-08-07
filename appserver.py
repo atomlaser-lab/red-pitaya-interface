@@ -1,4 +1,4 @@
-import sys
+"""Starts an instance of a socket server for communicating with the FPGA"""
 import socket
 import selectors
 import traceback

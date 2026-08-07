@@ -1,15 +1,21 @@
-import sys
+"""Module for server and client connections"""
 import selectors
 import json
-import io
 import struct
 import socket
 
 import appcontroller
 
-
 class ServerConnection:
-    def __init__(self,selector,sock,addr,suppress_messages):
+    def __init__(self, selector: selectors.DefaultSelector, sock: socket.socket, addr: tuple, suppress_messages: bool=False):
+        """Creates an instance of the ServerConnection class
+        
+        Arguments:
+        selector: selectors.DefaultSelector -- Selector to use for handling I/O
+        sock: socket.socket -- Socket used for communication
+        addr: tuple -- Tuple returned by socket.socket.connect()
+        suppress_messages: bool -- Set to true to suppress messages. Useful for debugging
+        """
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -18,6 +24,7 @@ class ServerConnection:
         self._reset()
 
     def _reset(self):
+        """Resets message properties to default values"""
         self._recv_buffer = b""
         self._send_buffer = b""
         self.header_len = None
@@ -28,8 +35,12 @@ class ServerConnection:
         self.response = None
         self.response_created = False
 
-    def _set_selector_events_mask(self,mode):
-        # Sets the selector's event mask to r, w, or rw/wr
+    def _set_selector_events_mask(self, mode: str):
+        """Sets the selector's event mask to r, w, or rw/wr
+        
+        Arguments
+        mode: str -- Either "r", "w", or "rw" | "wr" for read, write, and read/write
+        """
         if mode == "r":
             events = selectors.EVENT_READ
         elif mode == "w":
@@ -41,7 +52,7 @@ class ServerConnection:
         self.selector.modify(self.sock,events,data=self)
 
     def _read(self):
-        # Internal read function, reads up to 4096 bytes from socket
+        """Internal read function, reads up to 4096 bytes from socket and adds to buffer"""
         try:
             # Socket should be ready to read
             data = self.sock.recv(4096)
@@ -57,7 +68,10 @@ class ServerConnection:
                 raise RuntimeError("Peer closed.")
 
     def _write(self):
-        # Internal write function
+        """Internal write function
+
+        When finished, sets selector events mask to "r" and resets communication properties
+        """
         if self._send_buffer:
             # If there is valid data in the send buffer
             try:
@@ -80,7 +94,10 @@ class ServerConnection:
                         self.close()
 
     def read(self):
-        # This function is called repeatedly by socket event loop. Processes header and message data
+        """Processes header and message data from client
+        
+        This function is called repeatedly by socket event loop. 
+        """
         self._read()
 
         # First step is to process header length
@@ -96,7 +113,10 @@ class ServerConnection:
             self.process_request()
 
     def write(self):
-        # This function is called repeatedly until a response is ready to be sent
+        """Writes data to client
+        
+        This function is called repeatedly until a response is ready to be sent
+        """
         # If message has been received
         if self.msg:
             # If the response hasn't been created (None is converted into boolean False)
@@ -105,7 +125,7 @@ class ServerConnection:
         self._write()
 
     def close(self):
-        # Closes the socket connection
+        """Closes the socket connection"""
         if not self.suppress_messages:
             print("Closing connection (%s, %s)" % self.addr,end='\n\n')
         try:
@@ -117,14 +137,14 @@ class ServerConnection:
             self.sock = None
 
     def process_proto_header(self):
-        # This function retrieves the header from the message
+        """This function retrieves the header from the client's message"""
         proto_len = 2
         if len(self._recv_buffer) >= proto_len:
             self.header_len = struct.unpack("<H",self._recv_buffer[:proto_len])[0]
             self._recv_buffer = self._recv_buffer[proto_len:]
 
     def process_header(self):
-        # This function processes the header
+        """This function processes the client's header"""
         if len(self._recv_buffer) >= self.header_len:
             self.header = json.loads(self._recv_buffer[:self.header_len].decode('ascii'))
             self.msg_len = self.header["length"]
@@ -139,7 +159,10 @@ class ServerConnection:
             self._recv_buffer = self._recv_buffer[self.header_len:]
 
     def process_request(self):
-        # Processes the message
+        """Processes the client'smessage
+        
+        Executes received message and sends data as appropriate back to client
+        """
         if len(self._recv_buffer) >= self.msg_len:
             self.msg = self._recv_buffer[:self.msg_len]
             pmsg = []
@@ -152,27 +175,26 @@ class ServerConnection:
             self._recv_buffer = self._recv_buffer[self.msg_len:]
             
             # Write data using io-controller
-            self.fpga_response = appcontroller.write(pmsg,self.header)
+            self.fpga_response = appcontroller.remote_exec(pmsg,self.header)
             if not self.suppress_messages:
                 print("Header written to client:")
             # At end of reading of data, set class to write mode
             self._set_selector_events_mask("w")
 
     def create_response(self):
-        # Get data
-        data = self.fpga_response.pop("data")
-        self.fpga_response["length"] = len(data)
+        """Creates a response to send to the client"""
         # Make header
-        json_str = json.dumps(self.fpga_response)
+        json_str = json.dumps(self.fpga_response.make_header())
         if not self.suppress_messages:
             print(json_str)
         tmp = json_str.encode('ascii')
         self._send_buffer = struct.pack("<H",len(tmp)) + tmp
         # Append data
-        self._send_buffer += data
+        self._send_buffer += self.fpga_response.data
         self.response_created = True
               
-    def process_events(self,mask):
+    def process_events(self, mask):
+        """Executes the correct method based on the selector mask"""
         if mask & selectors.EVENT_READ:
             self.read()
         if mask & selectors.EVENT_WRITE:
@@ -180,7 +202,7 @@ class ServerConnection:
 
 
 class ClientConnection:
-    def __init__(self, target: tuple[str,int], keep_alive: bool=False, timeout:float=30):
+    def __init__(self, target: tuple[str,int], keep_alive: bool=False, timeout: float=30):
         """Creates a ClientConnection instance
             
         Arguments:
@@ -219,19 +241,25 @@ class ClientConnection:
         except Exception as e:
             raise e
 
-    def write(self, data=[0], **kwargs):
-        """Write data to server"""
+    def write(self, data: list[int]=[0], **kwargs):
+        """Write data to server
+        
+        Arguments
+        data: list[int] -- List of uint32-compatible integer values to send to server
+        **kwargs -- The resulting dictionary is added to the header sent to the server
+        """
         if data is None:
             raise ValueError("Cannot write 'None' to server")
-
+        # Each uint32-compatible integer value is 4 bytes
         self.header["length"] = 4*len(data)
         self.header["keep_alive"] = self.keep_alive
+        # Append optional keyword arguments to header
         for key, value in kwargs.items():
             self.header[key] = value
-
+        # The _args property contains fixed header values for all transactions
         for key, value in self._args.items():
             self.header[key] = value
-
+        # Header is a JSON-formatted string
         self.header = json.dumps(self.header)
         self.header_len = len(self.header)
         self._send_buffer = struct.pack("<H",self.header_len)
@@ -245,10 +273,17 @@ class ClientConnection:
             self.read()
         # Check for errors
         if self.header["err"]:
-            raise ConnectionError("Connection returned error: {}".format(self.header["errMsg"]))
+            raise ConnectionError("Connection returned error: {}".format(self.header["msg"]))
+        # Close the socket connection
+        if not self.keep_alive:
+            self.sock.close()
+            self.sock = None
 
     def read(self):
-        # This function is called repeatedly. Processes header and message data
+        """Processes header and message data 
+        
+        This function is called repeatedly.
+        """
         self._read()
 
         # First step is to process header length
@@ -264,7 +299,7 @@ class ClientConnection:
             self.process_request()
 
     def _read(self):
-        # Internal read function, reads up to 2**16 bytes from socket
+        """Internal read function, reads up to 2**16 bytes from socket"""
         try:
             # Socket should be ready to read
             data = self.sock.recv(2**16)
@@ -301,21 +336,21 @@ class ClientConnection:
                     break
 
     def process_proto_header(self):
-        # This function retrieves the header from the message
+        """This function retrieves the header from the server's message"""
         proto_len = 2
         if len(self._recv_buffer) >= proto_len:
             self.header_len = struct.unpack("<H",self._recv_buffer[:proto_len])[0]
             self._recv_buffer = self._recv_buffer[proto_len:]
 
     def process_header(self):
-        # This function processes the header
+        """This function processes the server's header"""
         if len(self._recv_buffer) >= self.header_len:
             self.header = json.loads(self._recv_buffer[:self.header_len].decode('ascii'))
             self.msg_len = self.header["length"]
             self._recv_buffer = self._recv_buffer[self.header_len:]
 
     def process_request(self):
-        # Processes the message
+        """Processes the server's message"""
         if len(self._recv_buffer) >= self.msg_len:
             self.msg = self._recv_buffer[:self.msg_len]
             self.recv_data = []

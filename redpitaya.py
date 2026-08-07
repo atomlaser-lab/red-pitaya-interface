@@ -1,3 +1,31 @@
+"""Module for specifying class for interfacing with device
+
+The assumption here is that the FPGA stores its parameters
+in 32-bit registers, where multiple parameters might exist
+within a single register, and where a parameter might also
+span several registers. 
+
+Available classes:
+DeviceRegister -- Represents device registers and provides
+    an interface for setting and getting register values
+    and for reading/writing the register from the device
+
+DeviceRegisterList -- A list of DeviceRegister instances
+    mainly to provide a useful semantic way of accessing
+    DeviceRegister methods on multiple registers at once
+
+DeviceParameter -- Represents a parameter on the FPGA, 
+    and provides an interface for setting/getting values
+    from the associated register, as well as for converting
+    the "physical" values (like volts) to the internal FPGA
+    representation
+
+DeviceParameterList -- The same as DeviceRegisterList, but for
+    DeviceParameter objects
+
+DeviceSubModule -- Represents sub-modules within the FPGA
+    design, which can contain their own registers and parameters
+"""
 import math
 import struct
 from enum import Enum
@@ -17,7 +45,7 @@ class ParamType(Enum):
     UINT64 = "Q"
     INT64 = "q"
 
-def typecast(value : int, out_type : ParamType):
+def typecast(value: int, out_type: ParamType) -> int:
     """Casts a value to a particular type
     
     Need to have a function that converts an integer to a particular
@@ -49,29 +77,30 @@ def typecast(value : int, out_type : ParamType):
 
 
 class DeviceRegister:
+    # The default address for AXI buses on Zynq devices
     DEFAULT_ADDR_OFFSET = 0x40000000
     MAX_ADDR = 0x3fffffff
 
-    def __init__(self, addr: int | str, conn : libserver.ClientConnection, *, read_only: bool=False, offset : int=DEFAULT_ADDR_OFFSET):
+    def __init__(self, addr: int | str, conn: libserver.ClientConnection, *, read_only: bool=False, offset: int=DEFAULT_ADDR_OFFSET):
         """Creates an instance of DeviceRegister
         
         Arguments:
-        addr : int | str -- Register address. If string, must be a hexadecimal number
+        addr: int | str -- Register address. If string, must be a hexadecimal number
         conn: libserver.ClientConnection -- client connection object
-        **read_only (bool) -- Read only (true) or not (false)
-        **offset (int) -- Address offset, which selects which AXI bus to use
+        **read_only: bool -- Read only (true) or not (false)
+        **offset: int -- Address offset, which selects which AXI bus to use
         """
         self.set_addr(addr)
-        self.conn = conn
+        self._conn = conn
         self.value = 0
         self.read_only = read_only
-        self.offset = offset
+        self.offset = offset & 0xFFFFFFFF
 
     def set_addr(self, addr: int | str):
         """Sets the register address with error checking
         
         Arguments:
-        addr : int | str -- Register address. If string, must be a hexadecimal number
+        addr: int | str -- Register address. If string, must be a hexadecimal number
         """
         if isinstance(addr,str):
             addr = int(addr,16)
@@ -81,32 +110,32 @@ class DeviceRegister:
         else:
             self.addr = addr
 
-    def set(self, value : int, bits : list[int]):
+    def set(self, value: int, bits: list[int]):
         """Sets the register value based on the bit range
         
         Arguments:
         value : int -- the value to set
-        bits : list[int] -- a two-element list with the start and stop bits (inclusive)
+        bits : list[int] -- a two-element sorted list with the start and stop bits (inclusive)
         """
         tmp = self.value
         if tmp is None:
             tmp = 0
-        # tmp = typecast(tmp & 0xFFFFFFFF,ParamType.UINT32)
+
         tmp = tmp & 0xFFFFFFFF
         upper_mask = (1 << bits[1] + 1) - 1
         lower_mask = (1 << bits[0]) - 1
         mask = upper_mask ^ lower_mask
-        # value = typecast(value & 0xFFFFFFFF,ParamType.UINT32)
+
         value = value & 0xFFFFFFFF
         value = value << bits[0]
         tmp = tmp & ~mask
         self.value = (value & mask) | tmp
 
-    def get(self,bits : list[int]) -> int:
+    def get(self, bits: list[int]) -> int:
         """Returns the value within a given bit range
         
         Arguments:
-        bits : list[int] -- a two-element list with the start and stop bits (inclusive)
+        bits : list[int] -- a two-element sorted list with the start and stop bits (inclusive)
         """
         mask = 0xFFFFFFFF
         upper_mask = (1 << bits[1] + 1) - 1
@@ -118,13 +147,17 @@ class DeviceRegister:
         """Write value to register on device"""
         data = self.get_write_data()
         if data is not None:
-            self.conn.write(data, mode="write")
+            self._conn.write(data, mode="write")
         return self
 
     def get_write_data(self) -> list[int]:
-        """Returns the list of data to write to device"""
+        """Returns the list of data to write to device
+        
+        Data is returned as [address to write to, data to write]
+        If register is read-only, then returns an empty list
+        """
         if self.read_only:
-            data = None
+            data = []
         else:
             data = [self.offset + self.addr, self.value]
         return data
@@ -132,62 +165,105 @@ class DeviceRegister:
     def get_read_data(self) -> tuple:
         """Returns a tuple of data to read from device
         
-        Returns ([address to read], [itself])
+        Returns ([address to read], [this register])
         """
         return ([self.offset + self.addr], [self])
 
     def read(self):
         """Reads data from device"""
-        self.conn.write(self.get_read_data()[0][0], mode="read")
-        self.value = self.conn.recv_data
+        self._conn.write(self.get_read_data()[0], mode="read")
+        self.value = self.conn.recv_data[0]
 
-    def print(self, name, width=20):
-        return f"{name:{width}}: {self.value:#08x}\n"
+    def print(self, name: str, width: int=20) -> str:
+        """Returns am abbreviated string representing the register value
+        
+        Arguments
+        name: str -- The name to use for this register
+        width: int -- The width of the name field
+        """
+        return f"{name:{width}}: {self.value:#010x}\n"
 
     def __str__(self):
+        """Returns a string representation of this object"""
         s = (
             "DeviceRegister object with properties:\n" \
-            "   Address:   {0.addr:#08x}\n" \
-            "   Value:     {0.value:#08x}\n" \
+            "   Address:   {0.addr:#010x}\n" \
+            "   Value:     {0.value:#010x}\n" \
             "   Read-only: {0.read_only!r}\n" \
-            "   Offset:    {0.offset:#08x}"
+            "   Offset:    {0.offset:#010x}"
             ).format(self)
         return s
 
 class DeviceRegisterList(collections.UserList):
     def __init__(self):
+        """Creates an instance of the class, representing a list of DeviceRegister objects"""
         self.data = []
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: int, value: DeviceRegister):
+        """Sets the value of the internal list at a given index
+        
+        Arguments
+        key: int -- The key to set
+        value: DeviceRegister -- the value to set
+        """
         if isinstance(value,DeviceRegister):
             return super().__setitem__(key, value)
         else:
             raise ValueError("Values can only be of type DeviceRegister")
 
-    def append(self, value, /):
+    def append(self, value: DeviceRegister, /):
+        """Appends a value to the internal list
+        
+        Arguments
+        value: DeviceRegister -- the value to append
+        """
         if isinstance(value,DeviceRegister):
             return super().append(value)
         else:
             raise ValueError("Values can only be of type DeviceRegister")
 
     def extend(self, value, /):
+        """Extends the internal list
+        
+        Arguments
+        value: DeviceRegisterList -- the list to append to the internal list
+        """
         if isinstance(value,DeviceRegisterList):
-            return super().extend(value)
+            return super().extend(value.data)
         else:
             raise ValueError("Values can only be of type DeviceRegisterList")
 
-    def insert(self, index, value, /):
+    def insert(self, index: int, value, /):
+        """Inserts a new list at the given index
+                
+        Arguments
+        index: int -- the index at which to insert
+        value: DeviceRegisterList -- the list to insert
+        """
         if isinstance(value,DeviceRegisterList):
-            return super().insert(index, value)
+            return super().insert(index, value.data)
         else:
             raise ValueError("Values can only be of type DeviceRegisterList")
 
-    def set(self, value : int, bits : list):
+    def set(self, value: int, bits: list):
+        """Sets the register values
+        
+        Arguments
+        value: int -- The integer value to set
+        bits: list -- A list of 2-element lists of bits to use for setting the value
+        """
         for idx, bbits in enumerate(bits):
             self.data[idx].set(value & 0xFFFFFFFF, bbits)
             value = value >> 32
 
-    def get(self, bits : list):
+    def get(self, bits: list) -> int:
+        """Returns the value broken across all registers
+        
+        Arguments
+        bits: list -- A list of 2-element lists of bits to use for getting the value
+
+        Returns an integer
+        """
         value = 0x0000000000000000
         for idx, bbits in enumerate(bits):
             tmp = self.data[idx].get(bbits)
@@ -195,35 +271,63 @@ class DeviceRegisterList(collections.UserList):
         return value
 
     def write(self):
+        """Writes all register data to device
+        
+        This assumes that every register is associated with the same
+        ClientConnection object, which it should be
+        """
         write_data = self.get_write_data()
-        self.data[0].conn.write(write_data, mode="write")
+        self.data[0]._conn.write(write_data, mode="write")
         return self
     
     def read(self):
+        """Reads all register data from device
+                
+        This assumes that every register is associated with the same
+        ClientConnection object, which it should be
+        """
         read_data = self.get_read_data()
-        self.data[0].conn.write(read_data, mode="read")
+        self.data[0]._conn.write(read_data, mode="read")
         return self
 
-    def get_write_data(self):
+    def get_write_data(self) -> list:
+        """Gets all the write data from every register
+        
+        Returns a list of write data, interleaved as [address to write to, data to write]
+        """
         write_data = []
         for item in self.data:
             if not item.read_only:
                 write_data.extend(item.get_write_data())
         return write_data
 
-    def get_read_data(self):
-        read_data = []
+    def get_read_data(self) -> list:
+        """Gets all the read data from every register
+        
+        Returns ([addresses to read], [the registers])
+        """
+        d = []
+        R = []
         for item in self.data:
-            read_data.extend(item.get_read_data())
-        return read_data
+            tmp = item.get_read_data()
+            d.extend(tmp[0])
+            R.extend(tmp[0])
+        return (d, R)
 
     def print(self, name, width=20):
+        """Returns am abbreviated string representing the registers' values
+                
+        Arguments
+        name: str -- The name to use for these registers
+        width: int -- The width of the name fields
+        """
         s = ""
         for key, item in enumerate(self.data):
             s += item.print(f"{name} {key}", width)
         return s
 
     def __str__(self):
+        """Returns a string representation of this object"""
         s = ""
         for item in self.data:
             s += str(item) + "\n\n"
@@ -231,10 +335,22 @@ class DeviceRegisterList(collections.UserList):
 
 
 class DeviceParameter:
-
-    def __init__(self, bits : list, regs_in : DeviceRegister, ptype : ParamType=ParamType.UINT32,
+    def __init__(self, bits: list, regs_in: DeviceRegister | DeviceRegisterList, ptype: ParamType=ParamType.UINT32,
                  *, to_int=None, from_int=None, lower_limit=None, upper_limit=None):
-        if isinstance(regs_in, DeviceRegister) or isinstance(regs_in, DeviceRegisterList):
+        """Creates an instance of DeviceParameter
+        
+        Arguments
+        bits: list -- The bit range that this parameter is associated with.
+            Is either a 2-element list or a list of 2-element lists, where the length
+            of the latter list is the same as the number of registers
+        regs_in: DeviceRegister | DeviceRegisterList -- Registers associated with this parameter
+        ptype: ParamType -- How the parameter value should be translated to an integer representation
+        to_int -- Function converting a physical value (like volts) to an integer
+        from_int -- Function converting an integer to a physical value (like volts)
+        lower_limit -- Lower physical limit for parameter
+        upper_limit -- Upper physical limit for parameter
+        """
+        if isinstance(regs_in, (DeviceRegister, DeviceRegisterList)):
             self._regs = regs_in
         else:
             raise TypeError("Register can only be a single DeviceRegister or a DeviceRegisterList")
@@ -248,15 +364,21 @@ class DeviceParameter:
         self.upper_limit = upper_limit
         if to_int is None:
             self.to_int = lambda x: int(x)
+        else:
+            self.to_int = to_int
         if from_int is None:
             self.from_int = lambda x: x
+        else:
+            self.from_int = from_int
 
         if isinstance(ptype,ParamType):
             self._type = ptype
         else:
             raise ValueError("Type must be of type ParamType")
 
-        if isinstance(self._regs,DeviceRegisterList) and len(self._regs) > 1 and not((self._type == ParamType.UINT64) or (self._type == ParamType.INT64) or (self._type == ParamType.UINT32)):
+        if (isinstance(self._regs,DeviceRegisterList) 
+                and len(self._regs) > 1 
+                and not((self._type == ParamType.UINT64) or (self._type == ParamType.INT64) or (self._type == ParamType.UINT32))):
             raise ValueError("When the number of registers is larger than 1, type must be UINT64, INT64, or UINT32")
 
 
@@ -319,11 +441,11 @@ class DeviceParameter:
 
         self.check(v)
         self.value = v
+        self._uint_value = int(self.to_int(self.value))
         if self._type is ParamType.UINT64 or self._type is ParamType.INT64:
-            self._uint_value = self.value & 0xFFFFFFFFFFFFFFFF
+            self._uint_value = self._uint_value & 0xFFFFFFFFFFFFFFFF
         else:
-            self._uint_value = self.value & 0xFFFFFFFF
-        # self._uint_value = typecast(self.to_int(v),self._type)
+            self._uint_value = self._uint_value & 0xFFFFFFFF
 
         self._regs.set(self._uint_value,self._bits)
 
@@ -457,5 +579,5 @@ class DeviceSubModule(ABC):
 
     def get(self):
         for value in self.__dict__.values():
-            if hasattr(value,"get"):
+            if isinstance(value,(DeviceParameter, DeviceParameterList, DeviceSubModule)):
                 value.get()
