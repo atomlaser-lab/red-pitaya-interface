@@ -287,7 +287,7 @@ class DeviceRegisterList(collections.UserList):
         ClientConnection object, which it should be
         """
         read_data = self.get_read_data()
-        self.data[0]._conn.write(read_data, mode="read")
+        self.data[0]._conn.write(read_data[0], mode="read")
         return self
 
     def get_write_data(self) -> list:
@@ -311,7 +311,7 @@ class DeviceRegisterList(collections.UserList):
         for item in self.data:
             tmp = item.get_read_data()
             d.extend(tmp[0])
-            R.extend(tmp[0])
+            R.extend(tmp[1])
         return (d, R)
 
     def print(self, name, width=20):
@@ -336,7 +336,7 @@ class DeviceRegisterList(collections.UserList):
 
 class DeviceParameter:
     def __init__(self, bits: list, regs_in: DeviceRegister | DeviceRegisterList, ptype: ParamType=ParamType.UINT32,
-                 *, to_int=None, from_int=None, lower_limit=None, upper_limit=None):
+                 *, to_int=None, from_int=None, lower_limit=None, upper_limit=None, units: str=""):
         """Creates an instance of DeviceParameter
         
         Arguments
@@ -349,6 +349,7 @@ class DeviceParameter:
         from_int -- Function converting an integer to a physical value (like volts)
         lower_limit -- Lower physical limit for parameter
         upper_limit -- Upper physical limit for parameter
+        units: str -- The units of the physical parameter. This is for display purposes only!
         """
         if isinstance(regs_in, (DeviceRegister, DeviceRegisterList)):
             self._regs = regs_in
@@ -359,6 +360,7 @@ class DeviceParameter:
 
         self.value = 0
         self._uint_value = 0
+        self.units = units
 
         self.lower_limit = lower_limit
         self.upper_limit = upper_limit
@@ -382,7 +384,14 @@ class DeviceParameter:
             raise ValueError("When the number of registers is larger than 1, type must be UINT64, INT64, or UINT32")
 
 
-    def set_bits(self,bits : list):
+    def set_bits(self, bits: list):
+        """Sets the bit ranges associated with this parameter
+        
+        Arguments
+        bits: list -- A list of bit ranges. For a single register, this should
+            be a 2-element list. For multiple registers, it must be a list of 
+            2-element lists
+        """
         if isinstance(bits[0],list):
             # Is bits a list of lists?
             if len(self._regs) != len(bits):
@@ -412,11 +421,11 @@ class DeviceParameter:
         else:
             return self._bits[1] - self._bits[0] + 1
 
-    def check(self,v=None,**kwargs):
+    def check(self, v=None, **kwargs):
         """Checks value against limits
         
         Arguments:
-        v : Any -- value to check against. If none provided, uses current value
+        v: Any -- value to check against. If none provided, uses current value
         """
         if v is None:
             v = self.value
@@ -436,8 +445,16 @@ class DeviceParameter:
         if tmp > self.get_num_bits():
             raise ValueError("Value {} requires at least {} bits, {} specified".format(v,tmp,self.get_num_bits()))
 
-    def set(self,v,**kwargs):
-        """Sets the parameter value, computes integer value, and changes register"""
+        return self
+
+    def set(self, v, **kwargs):
+        """Sets the parameter value, computes integer value, and changes register
+        
+        Arguments
+        v: Any -- the value to set
+
+        Returns itself
+        """
 
         self.check(v)
         self.value = v
@@ -448,31 +465,42 @@ class DeviceParameter:
             self._uint_value = self._uint_value & 0xFFFFFFFF
 
         self._regs.set(self._uint_value,self._bits)
+        return self
 
-    def get(self,**kwargs):
+    def get(self, **kwargs):
         """Returns the parameter value from the register"""
         self._uint_value = typecast(self._regs.get(self._bits), self._type)
         self.value = self.from_int(self._uint_value)
         return self.value
 
     def read(self, **kwargs):
-        """Reads data from server and stores new parameter value"""
+        """Reads data from server and stores new parameter value
+        
+        Returns the instance"""
         self._regs.read()
-        self.get(**kwargs)
+        return self
 
     def write(self):
         """Writes parameter value to register and then to server"""
         self._regs.write()
+        return self
 
-    def print(self, name, width=20, formatstr="d", units=""):
-        return f"{name:{width}}: {self.value:{formatstr}} {units}\n"
+    def print(self, name: str, width: int=20, formatstr: str="d"):
+        """Returns a string giving a summary of the parameter value
+        
+        Arguments
+        name: str -- The name to use
+        width: int -- The width of the printed name field
+        formatstr: str -- The format specifier for the parameter value
+        """
+        return f"{name:{width}}: {self.value:{formatstr}} {self.units}\n"
 
     def __str__(self):
         s = (
             "DeviceParameter object with properties:\n" \
             "   Bit range:      {0._bits}\n" \
             "   Type:           {0._type.name}\n" \
-            "   Physical value: {0.value}\n" \
+            "   Physical value: {0.value} {0.units}\n" \
             "   UINT value:     0x{0._uint_value:0x}\n" \
             "   Limits:         [{0.lower_limit}, {0.upper_limit}]"
             ).format(self)
@@ -482,33 +510,61 @@ class DeviceParameter:
 class DeviceParameterList(collections.UserList):
 
     def __init__(self):
+        """Creates an instance of the class, representing a list of DeviceParameter objects"""
         self.data = []
 
     def __setitem__(self, key, value):
+        """Sets the value of the internal list at a given index
+                
+        Arguments
+        key: int -- The key to set
+        value: Deviceparameter -- the value to set
+        """
         if isinstance(value,DeviceParameter):
             return super().__setitem__(key,value)
         else:
             raise ValueError("Values can only be of type DeviceParameter")
 
     def append(self, value, /):
+        """Appends a value to the internal list
+        
+        Arguments
+        value: DeviceParameter -- the value to append
+        """
         if isinstance(value,DeviceParameter):
             return super().append(value)
         else:
             raise ValueError("Values can only be of type DeviceParameter")
 
     def extend(self, value, /):
+        """Extends the internal list
+        
+        Arguments
+        value: DeviceParameterList -- the list to append to the internal list
+        """
         if isinstance(value,DeviceParameterList):
             return super().extend(value.data)
         else:
             raise ValueError("Values can only be of type DeviceParameterList")
 
-    def insert(self, index, value, /):
+    def insert(self, index: int, value, /):
+        """Inserts a new list at the given index
+        
+        Arguments
+        index: int -- the index at which to insert
+        value: DeviceParameterList -- the list to insert
+        """
         if isinstance(value,DeviceParameterList):
-            return super().insert(value.data)
+            return super().insert(index, value.data)
         else:
             raise ValueError("Values can only be of type DeviceParameterList")
 
     def set(self, values, /):
+        """Sets the register values
+        
+        Arguments
+        value -- The values to set. If a single value, the value is echoed across all parameters
+        """
         if not isinstance(values,list):
             values = [values] * len(self.data)
         elif len(values) != len(self):
@@ -518,23 +574,36 @@ class DeviceParameterList(collections.UserList):
             self.data[k].set(v)
 
     def write(self):
+        """Writes all parameters to device"""
         for item in self.data:
             item.write()
 
-    def get(self):
+    def get(self) -> list:
+        """Retrieves parameter values
+        
+        Returns a list of parameter values
+        """
         r = []
         for item in self.data:
             r.append(item.get())
         return r
 
     def read(self):
+        """Reads parameter values from device"""
         for item in self.data:
             item.read()
 
-    def print(self, name, width=20, formatstr="d", units=""):
+    def print(self, name, width=20, formatstr="d"):
+        """Returns a string giving a summary of the parameter values
+        
+        Arguments
+        name: str -- The name to use
+        width: int -- The width of the printed name field
+        formatstr: str -- The format specifier for the parameter value
+        """
         s = ""
         for key, item in enumerate(self.data):
-            s += item.print(f"{name} {key}", width, formatstr, units)
+            s += item.print(f"{name} {key}", width, formatstr)
         return s
 
     def __str__(self):
@@ -546,9 +615,6 @@ class DeviceParameterList(collections.UserList):
 
 class DeviceSubModule(ABC):
 
-    # def __init__(self):
-    #     self._parent = None
-
     @abstractmethod
     def set_defaults(self):
         """Set default values"""
@@ -556,11 +622,14 @@ class DeviceSubModule(ABC):
 
     @abstractmethod
     def print(self, width):
-        """Print information"""
+        """Prints information about the sub module"""
         pass
 
-    def get_write_data(self):
-        # p = self.__dict__
+    def get_write_data(self) -> list:
+        """Generates data for writing to the device
+        
+        Returns a list of interleaved [address to write to, data to write]
+        """
         d = []
         for value in self.__dict__.values():
             if hasattr(value,"get_write_data"):
@@ -568,6 +637,10 @@ class DeviceSubModule(ABC):
         return d
 
     def get_read_data(self) -> tuple:
+        """Returns a set of data for reading from device
+        
+        Returns a tuple of ([address to read from], [associated registers/device sub modules])
+        """
         d = []
         R = []
         for value in self.__dict__.values():
@@ -578,6 +651,7 @@ class DeviceSubModule(ABC):
         return (d, R)
 
     def get(self):
+        """Converts register values to actual parameters"""
         for value in self.__dict__.values():
             if isinstance(value,(DeviceParameter, DeviceParameterList, DeviceSubModule)):
                 value.get()
