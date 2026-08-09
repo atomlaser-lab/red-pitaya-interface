@@ -28,11 +28,16 @@ DeviceSubModule -- Represents sub-modules within the FPGA
 """
 import math
 import struct
-from enum import Enum
+from enum import Enum, Flag
 import collections
 from abc import ABC, abstractmethod
 
 import libserver
+
+class JumperSetting(Flag):
+    """Represents the LV or HV ADC input jumper settings"""
+    LV = 0
+    HV = 1
 
 class ParamType(Enum):
     """Enumerated class for struct to C-style types"""

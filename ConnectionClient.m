@@ -7,6 +7,7 @@ classdef ConnectionClient < handle
         port                %This is the TCP/IP port of the server
         keepAlive           %Tells the class to keep the connection alive (true/false)
         timeout             %Timeout for receiving data in seconds
+        args                %Optional arguments as cell array of name/value pairs
         debug               %Debugging flag
     end
     
@@ -20,29 +21,21 @@ classdef ConnectionClient < handle
     
     properties(Constant)
         TCP_PORT = 6666;                %Default TCP/IP Port
-        HOST_ADDRESS = '192.168.1.103'; %Default TCP/IP address
     end
     
     methods
         function self = ConnectionClient(host,port,keepAlive)
             %CONNECTIONCLIENT Constructs a class of the same name.
             %
-            %   SELF = CONNECTIONCLIENT() uses default HOST and PORT and
-            %   sets KEEPALIVE to FALSE
-            %
-            %   SELF = CONNECTIONCLIENT(HOST) uses the provided HOST
+            %   SELF = CONNECTIONCLIENT(HOST) uses the provided HOST and
+            %   default port, sets KEEPALIVE to FALSE
             %
             %   SELF = CONNECTIONCLIENT(__,PORT) uses the provided PORT
             %   number
             %
             %   SELF = CONNECTIONCLIENT(__,KEEPALIVE) sets the internal
             %   KEEPALIVE parameter
-            if nargin < 1
-                self.host = self.HOST_ADDRESS;
-            else
-                self.host = host;
-            end
-            
+            self.host = host;
             if nargin < 2
                 self.port = self.TCP_PORT;
             else
@@ -57,6 +50,7 @@ classdef ConnectionClient < handle
 
             self.initRead;
             self.timeout = 20;
+            self.args = {};
             self.debug = false;
         end
         
@@ -122,6 +116,12 @@ classdef ConnectionClient < handle
                 error('Variable arguments must be in name/value pairs');
             end
             %
+            % Check optional arguments
+            %
+            if mod(numel(self.args),2) ~= 0
+                error('Optional argument property "args" must be in the form of name/value pairs!');
+            end
+            %
             % Some data always needs to be written
             %
             if numel(data) == 0
@@ -147,8 +147,14 @@ classdef ConnectionClient < handle
                 %
                 % Loop through header names and values
                 %
-                for nn=1:2:numel(varargin)
+                for nn = 1:2:numel(varargin)
                     msghdr.(varargin{nn}) = varargin{nn+1};
+                end
+                %
+                % Loop through optional arguments and add to header
+                %
+                for nn = 1:2:numel(self.args)
+                    msghdr.(self.args{nn}) = self.args{nn+1};
                 end
                 %
                 % Tell the server to keep the connection alive

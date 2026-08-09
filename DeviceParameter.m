@@ -5,6 +5,7 @@ classdef DeviceParameter < handle
         upperLimit  %Upper limit on value
         lowerLimit  %Lower limit on value
         type        %Data type of the parameter
+        units       %The units of the physical parameter
     end
     
     properties(SetAccess = protected)
@@ -16,7 +17,7 @@ classdef DeviceParameter < handle
     end
     
     methods
-        function self = DeviceParameter(bits,regIn,type)
+        function self = DeviceParameter(bits,regIn,type,units)
             %DEVICEPARAMETER Constructs an instance of the class
             %
             %   SELF = DEVICEPARAMETER(BITS,REGIN) uses the bit range BITS
@@ -50,6 +51,12 @@ classdef DeviceParameter < handle
                 self.type = type;
             else
                 error('Type must be either ''uint64'', ''uint32'', ''int32'', or ''int16'' or ''int8''!');
+            end
+
+            if nargin < 4
+                self.units = '';
+            else
+                self.units = units;
             end
             
             if numel(self.regs) > 1 && ~(strcmpi(self.type,'uint64') || strcmpi(self.type,'uint32'))
@@ -318,10 +325,9 @@ classdef DeviceParameter < handle
             %   WIDTH wide.  UNITS is optional.  If no return argument is
             %   desired then the result is printed to the command line
             if nargin < 5
-                s = sprintf(['% ',num2str(width),'s: ',formatstr,'\n'],name,self.value);
-            else
-                s = sprintf(['% ',num2str(width),'s: ',formatstr,' %s\n'],name,self.value,units);
+                units = self.units;
             end
+            s = sprintf(['% ',num2str(width),'s: ',formatstr,' %s\n'],name,self.value,units);
             if nargout == 0
                 fprintf(1,s);
             end
@@ -338,11 +344,11 @@ classdef DeviceParameter < handle
                     end
                 end
                 if isnumeric(self.value) && isscalar(self)
-                    fprintf(1,'\t\t       Physical value: %.4g\n',self.value);
+                    fprintf(1,'\t\t       Physical value: %.4g %s\n',self.value, self.units);
                 elseif isnumeric(self.value) && numel(self.value)<=10
-                    fprintf(1,'\t\t       Physical value: [%s]\n',strtrim(sprintf('%.4g ',self.value)));
+                    fprintf(1,'\t\t       Physical value: [%s] %s\n',strtrim(sprintf('%.4g ',self.value)), self.units);
                 elseif isnumeric(self.value) && numel(self.value)>10
-                    fprintf(1,'\t\t       Physical value: [%dx%d %s]\n',size(self.value),class(self.value));
+                    fprintf(1,'\t\t       Physical value: [%dx%d %s] %s\n',size(self.value),class(self.value), self.units);
                 elseif ischar(self.value)
                     fprintf(1,'\t\t       Physical value: %s\n',self.value);
                 end
@@ -382,6 +388,7 @@ classdef DeviceParameter < handle
                 s.lowerLimit = self.lowerLimit;
                 s.type = self.type;
                 s.value = self.value;
+                s.units = self.value;
                 s.toIntegerFunction = self.toIntegerFunction;
                 s.fromIntegerFunction = self.fromIntegerFunction;
             else
@@ -397,6 +404,7 @@ classdef DeviceParameter < handle
                 self.upperLimit = s.upperLimit;
                 self.lowerLimit = s.lowerLimit;
                 self.type = s.type;
+                self.units = s.units;
                 self.toIntegerFunction = s.toIntegerFunction;
                 self.fromIntegerFunction = s.fromIntegerFunction;
                 self.set(s.value);
