@@ -177,7 +177,7 @@ class DeviceRegister:
     def read(self):
         """Reads data from device"""
         self._conn.write(self.get_read_data()[0], mode="read")
-        self.value = self.conn.recv_data[0]
+        self.value = self._conn.recv_data[0]
 
     def print(self, name: str, width: int=20) -> str:
         """Returns am abbreviated string representing the register value

@@ -241,6 +241,11 @@ class ClientConnection:
         except Exception as e:
             raise e
 
+    def _close(self):
+        """Closes the connection to the server"""
+        self.sock.close()
+        self.sock = None
+
     def write(self, data: list[int]=[0], **kwargs):
         """Write data to server
         
@@ -248,6 +253,7 @@ class ClientConnection:
         data: list[int] -- List of uint32-compatible integer values to send to server
         **kwargs -- The resulting dictionary is added to the header sent to the server
         """
+        self._reset()
         if data is None:
             raise ValueError("Cannot write 'None' to server")
         # Each uint32-compatible integer value is 4 bytes
@@ -276,8 +282,7 @@ class ClientConnection:
             raise ConnectionError("Connection returned error: {}".format(self.header["msg"]))
         # Close the socket connection
         if not self.keep_alive:
-            self.sock.close()
-            self.sock = None
+            self._close()
 
     def read(self):
         """Processes header and message data 

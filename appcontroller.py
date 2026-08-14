@@ -157,7 +157,7 @@ def remote_exec(data: list[int], header: dict) -> RemoteResponse:
     
     
     if (result != None) and result.returncode != 0:
-        response.error("Bus error with return code {%d}".format(result.returncode))
+        response.error("Bus error with return code {:d}".format(result.returncode))
 
     return response
         
