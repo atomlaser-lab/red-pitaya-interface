@@ -64,12 +64,13 @@ classdef(Abstract) DeviceSubModule < handle
             %STRUCT Creates a struct from the object
             if numel(self) > 1
                 for nn = 1:numel(self)
-                    self(nn).struct;
+                    s(nn) = self(nn).struct;
                 end
             else
                 p = properties(self);
+                s = struct;
                 for nn = 1:numel(p)
-                    if isa(self.(p{nn}),'DeviceSubModule')
+                    if isa(self.(p{nn}),'DeviceParameter') || isa(self.(p{nn}),'DeviceSubModule')
                         s.(p{nn}) = self.(p{nn}).struct;
                     end
                 end
@@ -83,10 +84,10 @@ classdef(Abstract) DeviceSubModule < handle
                     self(nn).loadstruct;
                 end
             else
-            p = properties(self);
+                p = properties(self);
                 for nn = 1:numel(p)
                     if isfield(s,p{nn})
-                        if isa(self.(p{nn}),'DeviceSubModule')
+                        if isa(self.(p{nn}),'DeviceParameter') || isa(self.(p{nn}),'DeviceSubModule')
                             try
                                 self.(p{nn}).loadstruct(s.(p{nn}));
                             catch

@@ -388,7 +388,7 @@ classdef DeviceParameter < handle
                 s.lowerLimit = self.lowerLimit;
                 s.type = self.type;
                 s.value = self.value;
-                s.units = self.value;
+                s.units = self.units;
                 s.toIntegerFunction = self.toIntegerFunction;
                 s.fromIntegerFunction = self.fromIntegerFunction;
             else
