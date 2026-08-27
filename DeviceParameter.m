@@ -136,6 +136,11 @@ classdef DeviceParameter < handle
                 end
             end
         end
+
+        function r = getLimits(self)
+            %GETLIMITS Returns the lower and upper limits as an array
+            r = [self.lowerLimit,self.upperLimit];
+        end
         
         function r = toInteger(self,varargin)
             %TOINTEGER Converts the arguments to an integer
