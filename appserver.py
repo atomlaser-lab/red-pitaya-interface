@@ -24,7 +24,7 @@ if args.host == None:
     host = r.stdout.decode('ascii').rstrip()
     if len(host) == 0:
         r = subprocess.run([sfile,'-t','inet'],stdout=subprocess.PIPE)
-        host = r.stdout.decode('ascii').rstrip()
+        host = r.stdout.decode('ascii').split()[0]
 else:
     host = args.host
 
